@@ -204,17 +204,13 @@ export const TrackEventSchema = z.discriminatedUnion("type", [
 
 export type TrackEvent = z.infer<typeof TrackEventSchema>;
 
-// --- WebSocket Message (top-level discriminated union on `op`) ---
+// --- WebSocket Message (top-level union on `op`) ---
 
-export const WebSocketMessageSchema = z.discriminatedUnion("op", [
+export const WebSocketMessageSchema = z.union([
   ReadyPayloadSchema,
   PlayerUpdateOpSchema,
   StatsSchema,
-  TrackStartEventSchema,
-  TrackEndEventSchema,
-  TrackExceptionEventSchema,
-  TrackStuckEventSchema,
-  WebSocketClosedEventSchema,
+  TrackEventSchema,
 ]);
 
 export type WebSocketMessage = z.infer<typeof WebSocketMessageSchema>;
@@ -237,6 +233,7 @@ export const PlayerUpdatePayloadSchema = z.object({
       endpoint: z.string(),
       sessionId: z.string(),
       token: z.string(),
+      channelId: z.string(),
     })
     .optional(),
 });
