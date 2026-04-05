@@ -190,5 +190,22 @@ describe("Node", () => {
         },
       });
     });
+
+    it("should send a gateway disconnect when disconnectVoice is called", async () => {
+      const setVoiceState = mock(() => Promise.resolve());
+      const nodeWithVoiceAdapter = new Node({
+        ...NODE_OPTIONS,
+        setVoiceState,
+      });
+
+      await nodeWithVoiceAdapter.disconnectVoice("guild-123");
+
+      expect(setVoiceState).toHaveBeenCalledWith({
+        channelId: null,
+        guildId: "guild-123",
+        selfDeaf: false,
+        selfMute: false,
+      });
+    });
   });
 });

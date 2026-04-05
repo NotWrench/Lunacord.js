@@ -32,8 +32,16 @@ interface NodeOptions {
   password: string;
   port: number;
   resume?: boolean;
+  setVoiceState?: (payload: VoiceStateUpdateRequest) => void | Promise<void>;
   timeout?: number;
   userId: string;
+}
+
+interface VoiceStateUpdateRequest {
+  channelId: string | null;
+  guildId: string;
+  selfDeaf: boolean;
+  selfMute: boolean;
 }
 
 const DEFAULT_CLIENT_NAME = "lavalink-client";
@@ -205,6 +213,25 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
     await this.waitForVoice(guildId, timeoutMs);
     return this.getVoicePayload(guildId);
+  }
+
+  async disconnectVoice(guildId: string): Promise<void> {
+    const setVoiceState = this.options.setVoiceState;
+    if (!setVoiceState) {
+      return;
+    }
+
+    await setVoiceState({
+      channelId: null,
+      guildId,
+      selfDeaf: false,
+      selfMute: false,
+    });
+
+    this.voiceStates.delete(guildId);
+    this.voiceServers.delete(guildId);
+    this.syncedVoiceStateKeys.delete(guildId);
+    this.rejectVoiceWaiters(guildId, new Error(`Voice connection was closed for guild ${guildId}`));
   }
 
   private setupSocketListeners(): void {

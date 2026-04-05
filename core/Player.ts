@@ -11,6 +11,8 @@ const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;
 
 export interface PlayerNodeAdapter {
+  destroyPlayer?: (guildId: string) => Promise<void>;
+  disconnectVoice?: (guildId: string) => Promise<void>;
   resolveVoicePayload?: (
     guildId: string
   ) => Promise<NonNullable<PlayerUpdatePayload["voice"]> | undefined>;
@@ -71,11 +73,19 @@ export class Player {
     });
   }
 
-  async stop(): Promise<void> {
+  async stop(destroyPlayer = true, disconnectVoice = true): Promise<void> {
     this.current = null;
     await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, {
       track: { encoded: null },
     });
+
+    if (disconnectVoice) {
+      await this.node.disconnectVoice?.(this.guildId);
+    }
+
+    if (destroyPlayer) {
+      await this.node.destroyPlayer?.(this.guildId);
+    }
   }
 
   async setVolume(volume: number): Promise<void> {
@@ -87,7 +97,7 @@ export class Player {
   }
 
   async skip(): Promise<void> {
-    await this.stop();
+    await this.stop(false, false);
     if (!this.queue.isEmpty) {
       await this.play();
     }

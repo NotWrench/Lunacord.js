@@ -38,6 +38,22 @@ client.on("clientReady", async () => {
     numShards: 1,
     userId: client.user!.id,
     clientName: "LunacordDemo",
+    setVoiceState: ({ guildId, channelId, selfMute, selfDeaf }) => {
+      const guild = client.guilds.cache.get(guildId);
+      if (!guild) {
+        return;
+      }
+
+      guild.shard.send({
+        op: 4,
+        d: {
+          guild_id: guildId,
+          channel_id: channelId,
+          self_mute: selfMute,
+          self_deaf: selfDeaf,
+        },
+      });
+    },
   });
 
   node.on("ready", () => console.log("[Lavalink] Node connected!"));
@@ -138,18 +154,6 @@ client.on("messageCreate", async (message) => {
     }
 
     await player.stop();
-    await node.destroyPlayer(message.guild.id);
-
-    // Disconnect from VC
-    message.guild.shard.send({
-      op: 4,
-      d: {
-        guild_id: message.guild.id,
-        channel_id: null,
-        self_mute: false,
-        self_deaf: false,
-      },
-    });
 
     await message.reply("Stopped and disconnected.");
   }

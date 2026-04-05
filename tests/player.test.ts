@@ -158,8 +158,13 @@ describe("Player", () => {
   });
 
   describe("stop", () => {
-    it("should clear current track and call REST", async () => {
+    it("should clear current track, disconnect voice, and destroy player", async () => {
       player.current = track;
+
+      const disconnectVoice = mock(() => Promise.resolve());
+      const destroyPlayer = mock(() => Promise.resolve());
+      mockNode.disconnectVoice = disconnectVoice;
+      mockNode.destroyPlayer = destroyPlayer;
 
       await player.stop();
 
@@ -167,6 +172,26 @@ describe("Player", () => {
       expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
         track: { encoded: null },
       });
+      expect(disconnectVoice).toHaveBeenCalledWith("guild-123");
+      expect(destroyPlayer).toHaveBeenCalledWith("guild-123");
+    });
+  });
+
+  describe("skip", () => {
+    it("should stop and continue without disconnecting voice", async () => {
+      player.current = track;
+      player.add(track2);
+
+      const disconnectVoice = mock(() => Promise.resolve());
+      const destroyPlayer = mock(() => Promise.resolve());
+      mockNode.disconnectVoice = disconnectVoice;
+      mockNode.destroyPlayer = destroyPlayer;
+
+      await player.skip();
+
+      expect(disconnectVoice).not.toHaveBeenCalled();
+      expect(destroyPlayer).not.toHaveBeenCalled();
+      expect(player.current?.encoded).toBe(track2.encoded);
     });
   });
 
