@@ -24,6 +24,8 @@ interface NodeOptions {
   numShards: number;
   password: string;
   port: number;
+  resume?: boolean;
+  timeout?: number;
   userId: string;
 }
 
@@ -34,11 +36,13 @@ export class Node extends TypedEventEmitter<NodeEvents> {
   readonly rest: Rest;
   readonly socket: Socket;
 
+  private readonly options: NodeOptions;
   private readonly players = new Map<string, Player>();
 
   constructor(options: NodeOptions) {
     super();
 
+    this.options = options;
     const clientName = options.clientName ?? DEFAULT_CLIENT_NAME;
 
     this.rest = new Rest({
@@ -93,6 +97,18 @@ export class Node extends TypedEventEmitter<NodeEvents> {
   private setupSocketListeners(): void {
     this.socket.on("ready", (payload) => {
       this.sessionId = payload.sessionId;
+
+      if (this.options.resume) {
+        this.rest.updateSession(this.sessionId, true, this.options.timeout).catch((err) => {
+          this.emit(
+            "error",
+            new Error(
+              `Failed to configure resuming: ${err instanceof Error ? err.message : String(err)}`
+            )
+          );
+        });
+      }
+
       this.emit("ready", payload);
     });
 

@@ -1,10 +1,11 @@
-// rest/Rest.ts
 import type { z } from "zod";
 import {
   type LoadResult,
   LoadResultSchema,
   type PlayerUpdatePayload,
   type RawTrack,
+  type Session,
+  SessionSchema,
   TrackSchema,
 } from "../types.ts";
 
@@ -143,5 +144,12 @@ export class Rest {
 
   destroyPlayer(sessionId: string, guildId: string): Promise<void> {
     return this.requestVoid("DELETE", `/v4/sessions/${sessionId}/players/${guildId}`);
+  }
+
+  updateSession(sessionId: string, resuming: boolean, timeout?: number): Promise<Session> {
+    return this.request("PATCH", `/v4/sessions/${sessionId}`, SessionSchema, {
+      resuming,
+      timeout,
+    });
   }
 }

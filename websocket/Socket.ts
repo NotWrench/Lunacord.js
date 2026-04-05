@@ -34,6 +34,7 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 
 export class Socket extends TypedEventEmitter<SocketEvents> {
   private readonly options: SocketOptions;
+  public sessionId: string | null = null;
   private ws: WebSocket | null = null;
   private intentionalClose = false;
   private reconnectAttempts = 0;
@@ -81,14 +82,18 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
     const { host, port, password, userId, numShards, clientName } = this.options;
     const url = `ws://${host}:${port}/v4/websocket`;
 
-    this.ws = new WebSocket(url, {
-      headers: {
-        Authorization: password,
-        "User-Id": userId,
-        "Num-Shards": String(numShards),
-        "Client-Name": `${clientName}/1.0.0`,
-      },
-    } as unknown as string[]);
+    const headers: Record<string, string> = {
+      Authorization: password,
+      "User-Id": userId,
+      "Num-Shards": String(numShards),
+      "Client-Name": `${clientName}/1.0.0`,
+    };
+
+    if (this.sessionId) {
+      headers["Session-Id"] = this.sessionId;
+    }
+
+    this.ws = new WebSocket(url, { headers } as unknown as string[]);
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
@@ -132,6 +137,7 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
 
     switch (message.op) {
       case "ready":
+        this.sessionId = message.sessionId;
         this.emit("ready", message);
         break;
       case "playerUpdate":
