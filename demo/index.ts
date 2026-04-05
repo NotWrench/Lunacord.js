@@ -18,80 +18,16 @@ const client = new Client({
   ],
 });
 
-let node: Node;
+let node: Node | null = null;
 
-// Track Discord Voice States to supply to Lavalink
-const voiceStates = new Map<string, { sessionId: string; channelId: string }>();
-const voiceServers = new Map<string, { token: string; endpoint: string }>();
-
-// Promise-based waiting for voice credentials from Discord
-const voiceReadyResolvers = new Map<string, () => void>();
-
-function waitForVoice(guildId: string, timeoutMs = 10_000): Promise<void> {
-  // If both pieces already cached, resolve immediately
-  if (voiceStates.has(guildId) && voiceServers.has(guildId)) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      voiceReadyResolvers.delete(guildId);
-      reject(new Error("Voice connection timed out"));
-    }, timeoutMs);
-
-    voiceReadyResolvers.set(guildId, () => {
-      clearTimeout(timer);
-      voiceReadyResolvers.delete(guildId);
-      resolve();
-    });
-  });
-}
-
-// Listen to raw Discord Voice Packets
+// Forward all Discord raw packets so Lunacord can manage VOICE_* state internally.
 client.on("raw", (packet) => {
-  if (packet.t === "VOICE_STATE_UPDATE" && packet.d.user_id === client.user?.id) {
-    if (!packet.d.channel_id) {
-      voiceStates.delete(packet.d.guild_id);
-    } else {
-      voiceStates.set(packet.d.guild_id, {
-        sessionId: packet.d.session_id,
-        channelId: packet.d.channel_id,
-      });
-    }
-    tryResolveVoice(packet.d.guild_id);
+  if (!node) {
+    return;
   }
 
-  if (packet.t === "VOICE_SERVER_UPDATE") {
-    voiceServers.set(packet.d.guild_id, {
-      token: packet.d.token,
-      endpoint: packet.d.endpoint,
-    });
-    tryResolveVoice(packet.d.guild_id);
-  }
+  node.handleVoicePacket(packet);
 });
-
-function tryResolveVoice(guildId: string) {
-  if (voiceStates.has(guildId) && voiceServers.has(guildId)) {
-    const resolver = voiceReadyResolvers.get(guildId);
-    if (resolver) {
-      resolver();
-    }
-  }
-}
-
-function getVoicePayload(guildId: string) {
-  const state = voiceStates.get(guildId);
-  const server = voiceServers.get(guildId);
-  if (!state || !server) {
-    return undefined;
-  }
-  return {
-    sessionId: state.sessionId,
-    token: server.token,
-    endpoint: server.endpoint,
-    channelId: state.channelId,
-  };
-}
 
 client.on("clientReady", async () => {
   console.log(`[Discord] Logged in as ${client.user?.tag}`);
@@ -163,9 +99,6 @@ client.on("messageCreate", async (message) => {
     });
 
     try {
-      // Wait for Discord to send us voice credentials
-      await waitForVoice(message.guild.id);
-
       const player = node.createPlayer(message.guild.id);
       const res = await player.search(query);
 
@@ -188,21 +121,8 @@ client.on("messageCreate", async (message) => {
         return;
       }
 
-      const voice = getVoicePayload(message.guild.id);
-      const sessionId = node.sessionId;
-      if (!sessionId || !voice) {
-        await message.reply("Voice connection failed.");
-        return;
-      }
-
-      // Send voice + track in a SINGLE PATCH so Lavalink handles them atomically
-      await node.rest.updatePlayer(sessionId, message.guild.id, {
-        track: { encoded: track.encoded },
-        voice,
-      });
-
       const wrappedTrack = new Track(track);
-      player.current = wrappedTrack;
+      await player.play(wrappedTrack);
 
       await message.reply(`Now playing: **${wrappedTrack.title}**`);
     } catch (err) {

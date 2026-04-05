@@ -2,12 +2,15 @@
 
 import type { Rest } from "../rest/Rest.ts";
 import type { Track } from "../structures/Track.ts";
-import type { LoadResult, SearchProvider } from "../types.ts";
+import type { LoadResult, PlayerUpdatePayload, SearchProvider } from "../types.ts";
 
 const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;
 
 export interface PlayerNodeAdapter {
+  resolveVoicePayload?: (
+    guildId: string
+  ) => Promise<NonNullable<PlayerUpdatePayload["voice"]> | undefined>;
   readonly rest: Pick<Rest, "loadTracks" | "search" | "updatePlayer">;
   readonly sessionId: string | null;
 }
@@ -46,9 +49,16 @@ export class Player {
     this.current = target;
     this.paused = false;
 
-    await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, {
+    const voicePayload = await this.node.resolveVoicePayload?.(this.guildId);
+    const payload: PlayerUpdatePayload = {
       track: { encoded: target.encoded },
-    });
+    };
+
+    if (voicePayload) {
+      payload.voice = voicePayload;
+    }
+
+    await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, payload);
   }
 
   async pause(paused: boolean): Promise<void> {

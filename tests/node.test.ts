@@ -124,4 +124,71 @@ describe("Node", () => {
       expect(errors[0]?.message).toBe("Queue advance failed");
     });
   });
+
+  describe("voice packet handling", () => {
+    it("should resolve a voice payload after both VOICE packets are received", async () => {
+      node.handleVoicePacket({
+        t: "VOICE_STATE_UPDATE",
+        d: {
+          guild_id: "guild-123",
+          user_id: "user-123",
+          session_id: "voice-session-123",
+          channel_id: "channel-123",
+        },
+      });
+
+      const payloadPromise = node.resolveVoicePayload("guild-123");
+
+      node.handleVoicePacket({
+        t: "VOICE_SERVER_UPDATE",
+        d: {
+          guild_id: "guild-123",
+          token: "voice-token",
+          endpoint: "us-east.discord.gg",
+        },
+      });
+
+      await expect(payloadPromise).resolves.toEqual({
+        channelId: "channel-123",
+        endpoint: "us-east.discord.gg",
+        sessionId: "voice-session-123",
+        token: "voice-token",
+      });
+    });
+
+    it("should sync voice state to Lavalink when both VOICE packets are available", async () => {
+      node.sessionId = "session-123";
+      node.rest.updatePlayer = mock(() => Promise.resolve());
+
+      node.handleVoicePacket({
+        t: "VOICE_STATE_UPDATE",
+        d: {
+          guild_id: "guild-456",
+          user_id: "user-123",
+          session_id: "voice-session-456",
+          channel_id: "channel-456",
+        },
+      });
+
+      node.handleVoicePacket({
+        t: "VOICE_SERVER_UPDATE",
+        d: {
+          guild_id: "guild-456",
+          token: "voice-token-456",
+          endpoint: "us-west.discord.gg",
+        },
+      });
+
+      await Promise.resolve();
+
+      expect(node.rest.updatePlayer).toHaveBeenCalledWith("session-123", "guild-456", {
+        voice: {
+          channelId: "channel-456",
+          endpoint: "us-west.discord.gg",
+          sessionId: "voice-session-456",
+          token: "voice-token-456",
+        },
+      });
+    });
+  });
 });

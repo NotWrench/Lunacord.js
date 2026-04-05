@@ -2,7 +2,14 @@
 
 import { Rest } from "../rest/Rest.ts";
 import { Track } from "../structures/Track.ts";
-import type { Exception, PlayerState, ReadyPayload, Stats, TrackEvent } from "../types.ts";
+import type {
+  Exception,
+  PlayerState,
+  PlayerUpdatePayload,
+  ReadyPayload,
+  Stats,
+  TrackEvent,
+} from "../types.ts";
 import { TypedEventEmitter } from "../utils/EventEmitter.ts";
 import { Socket } from "../websocket/Socket.ts";
 import { Player } from "./Player.ts";
@@ -31,8 +38,26 @@ interface NodeOptions {
 
 const DEFAULT_CLIENT_NAME = "lavalink-client";
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
+const DEFAULT_VOICE_TIMEOUT_MS = 10_000;
 const AUTO_ADVANCE_REASONS = new Set(["finished", "loadFailed"] as const);
 type AutoAdvanceReason = "finished" | "loadFailed";
+type VoicePayload = NonNullable<PlayerUpdatePayload["voice"]>;
+
+interface VoiceStateCache {
+  channelId: string;
+  sessionId: string;
+}
+
+interface VoiceServerCache {
+  endpoint: string;
+  token: string;
+}
+
+interface VoiceWaiter {
+  reject: (error: Error) => void;
+  resolve: () => void;
+  timer: ReturnType<typeof setTimeout>;
+}
 
 export class Node extends TypedEventEmitter<NodeEvents> {
   sessionId: string | null = null;
@@ -41,8 +66,13 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
   private readonly options: NodeOptions;
   private readonly players = new Map<string, Player>();
+  private readonly syncedVoiceStateKeys = new Map<string, string>();
+  private readonly voiceServers = new Map<string, VoiceServerCache>();
+  private readonly voiceStates = new Map<string, VoiceStateCache>();
+  private readonly voiceWaiters = new Map<string, VoiceWaiter[]>();
   private connectPromise: Promise<void> | null = null;
   private connectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private voicePacketForwardingEnabled = false;
 
   constructor(options: NodeOptions) {
     super();
@@ -131,15 +161,56 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     this.players.delete(guildId);
+    this.voiceStates.delete(guildId);
+    this.voiceServers.delete(guildId);
+    this.syncedVoiceStateKeys.delete(guildId);
+    this.rejectVoiceWaiters(guildId, new Error(`Player destroyed for guild ${guildId}`));
   }
 
   getPlayer(guildId: string): Player | undefined {
     return this.players.get(guildId);
   }
 
+  handleVoicePacket(packet: unknown): void {
+    this.voicePacketForwardingEnabled = true;
+
+    if (!this.isRecord(packet)) {
+      return;
+    }
+
+    const packetType = packet["t"];
+    const packetData = packet["d"];
+
+    if (typeof packetType !== "string" || !this.isRecord(packetData)) {
+      return;
+    }
+
+    if (packetType === "VOICE_STATE_UPDATE") {
+      this.handleVoiceStatePacket(packetData);
+      return;
+    }
+
+    if (packetType === "VOICE_SERVER_UPDATE") {
+      this.handleVoiceServerPacket(packetData);
+    }
+  }
+
+  async resolveVoicePayload(
+    guildId: string,
+    timeoutMs: number = DEFAULT_VOICE_TIMEOUT_MS
+  ): Promise<VoicePayload | undefined> {
+    if (!this.voicePacketForwardingEnabled) {
+      return undefined;
+    }
+
+    await this.waitForVoice(guildId, timeoutMs);
+    return this.getVoicePayload(guildId);
+  }
+
   private setupSocketListeners(): void {
     this.socket.on("ready", (payload) => {
       this.sessionId = payload.sessionId;
+      this.syncedVoiceStateKeys.clear();
 
       if (this.options.resume) {
         this.rest.updateSession(this.sessionId, true, this.options.timeout).catch((err) => {
@@ -239,6 +310,169 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       default:
         break;
     }
+  }
+
+  private getVoicePayload(guildId: string): VoicePayload | undefined {
+    const state = this.voiceStates.get(guildId);
+    const server = this.voiceServers.get(guildId);
+
+    if (!state || !server) {
+      return undefined;
+    }
+
+    return {
+      channelId: state.channelId,
+      endpoint: server.endpoint,
+      sessionId: state.sessionId,
+      token: server.token,
+    };
+  }
+
+  private handleVoiceServerPacket(packetData: Record<string, unknown>): void {
+    const guildId = this.getString(packetData["guild_id"]);
+    const token = this.getString(packetData["token"]);
+    const endpoint = this.getString(packetData["endpoint"]);
+
+    if (!guildId || !token || !endpoint) {
+      return;
+    }
+
+    this.voiceServers.set(guildId, { token, endpoint });
+    this.resolveVoiceWaiters(guildId);
+    void this.trySyncVoiceState(guildId);
+  }
+
+  private handleVoiceStatePacket(packetData: Record<string, unknown>): void {
+    const guildId = this.getString(packetData["guild_id"]);
+    const userId = this.getString(packetData["user_id"]);
+
+    if (!guildId || userId !== this.options.userId) {
+      return;
+    }
+
+    const channelIdValue = packetData["channel_id"];
+    if (channelIdValue === null) {
+      this.voiceStates.delete(guildId);
+      this.voiceServers.delete(guildId);
+      this.syncedVoiceStateKeys.delete(guildId);
+      this.rejectVoiceWaiters(
+        guildId,
+        new Error(`Voice connection was closed for guild ${guildId}`)
+      );
+      return;
+    }
+
+    const channelId = this.getString(channelIdValue);
+    const sessionId = this.getString(packetData["session_id"]);
+
+    if (!channelId || !sessionId) {
+      return;
+    }
+
+    this.voiceStates.set(guildId, { sessionId, channelId });
+    this.resolveVoiceWaiters(guildId);
+    void this.trySyncVoiceState(guildId);
+  }
+
+  private hasVoiceCredentials(guildId: string): boolean {
+    return this.voiceStates.has(guildId) && this.voiceServers.has(guildId);
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+  }
+
+  private getString(value: unknown): string | undefined {
+    return typeof value === "string" ? value : undefined;
+  }
+
+  private resolveVoiceWaiters(guildId: string): void {
+    if (!this.hasVoiceCredentials(guildId)) {
+      return;
+    }
+
+    const waiters = this.voiceWaiters.get(guildId);
+    if (!waiters) {
+      return;
+    }
+
+    this.voiceWaiters.delete(guildId);
+
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      waiter.resolve();
+    }
+  }
+
+  private rejectVoiceWaiters(guildId: string, error: Error): void {
+    const waiters = this.voiceWaiters.get(guildId);
+    if (!waiters) {
+      return;
+    }
+
+    this.voiceWaiters.delete(guildId);
+
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      waiter.reject(error);
+    }
+  }
+
+  private async trySyncVoiceState(guildId: string): Promise<void> {
+    const sessionId = this.sessionId;
+    const voicePayload = this.getVoicePayload(guildId);
+
+    if (!sessionId || !voicePayload) {
+      return;
+    }
+
+    const voiceKey = `${sessionId}:${voicePayload.sessionId}:${voicePayload.channelId}:${voicePayload.endpoint}:${voicePayload.token}`;
+    if (this.syncedVoiceStateKeys.get(guildId) === voiceKey) {
+      return;
+    }
+
+    try {
+      await this.rest.updatePlayer(sessionId, guildId, { voice: voicePayload });
+      this.syncedVoiceStateKeys.set(guildId, voiceKey);
+    } catch (error) {
+      this.emit("error", error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  private waitForVoice(guildId: string, timeoutMs: number): Promise<void> {
+    if (this.hasVoiceCredentials(guildId)) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const waiter: VoiceWaiter = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          const waiters = this.voiceWaiters.get(guildId);
+
+          if (waiters) {
+            const nextWaiters = waiters.filter((candidate) => candidate !== waiter);
+
+            if (nextWaiters.length === 0) {
+              this.voiceWaiters.delete(guildId);
+            } else {
+              this.voiceWaiters.set(guildId, nextWaiters);
+            }
+          }
+
+          reject(new Error(`Voice connection timed out for guild ${guildId}`));
+        }, timeoutMs),
+      };
+
+      const guildWaiters = this.voiceWaiters.get(guildId);
+      if (guildWaiters) {
+        guildWaiters.push(waiter);
+        return;
+      }
+
+      this.voiceWaiters.set(guildId, [waiter]);
+    });
   }
 
   private async handleQueueAdvance(

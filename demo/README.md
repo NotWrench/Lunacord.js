@@ -23,5 +23,5 @@ DISCORD_TOKEN=your_token_here bun run index.ts
 
 The demo demonstrates the strict architecture built during this session:
 - Re-uses `index.ts` from your library (type safety, schemas, and strictly native Bun code).
-- Hooks into `discord.js`'s raw WS packet event hook (`client.on('raw')`) to extract `VOICE_SERVER_UPDATE` and `VOICE_STATE_UPDATE` — avoiding third party Node packages or custom Discord WS implementations.
-- Updates the Lavalink `Node` by calling `REST` wrapper endpoints transparently using `tryProvideVoiceUpdate()` directly.
+- Hooks into `discord.js`'s raw WS packet event hook (`client.on('raw')`) and forwards packets to `node.handleVoicePacket(packet)`.
+- Lets Lunacord manage `VOICE_SERVER_UPDATE`/`VOICE_STATE_UPDATE` caching and Lavalink voice updates internally.
