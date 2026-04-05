@@ -2,6 +2,8 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import type { PlayerNodeAdapter } from "../core/Player.ts";
 import { Player } from "../core/Player.ts";
+import { Queue } from "../structures/Queue.ts";
+import type { SearchResult } from "../structures/SearchResult.ts";
 import { Track } from "../structures/Track.ts";
 import { type LoadResult, type RawTrack, SearchProvider } from "../types.ts";
 
@@ -78,10 +80,14 @@ describe("Player", () => {
   });
 
   describe("add", () => {
+    it("should expose a Queue instance", () => {
+      expect(player.queue).toBeInstanceOf(Queue);
+    });
+
     it("should add a track to the queue", () => {
       player.add(track);
-      expect(player.queue).toHaveLength(1);
-      expect(player.queue[0]?.title).toBe("Never Gonna Give You Up");
+      expect(player.queue.size).toBe(1);
+      expect(player.queue.peek()?.title).toBe("Never Gonna Give You Up");
     });
   });
 
@@ -92,7 +98,7 @@ describe("Player", () => {
 
       const removed = player.remove(0);
       expect(removed?.title).toBe("Never Gonna Give You Up");
-      expect(player.queue).toHaveLength(1);
+      expect(player.queue.size).toBe(1);
     });
 
     it("should return undefined for out-of-bounds index", () => {
@@ -119,7 +125,7 @@ describe("Player", () => {
       await player.play();
 
       expect(player.current?.title).toBe("Never Gonna Give You Up");
-      expect(player.queue).toHaveLength(1);
+      expect(player.queue.size).toBe(1);
       expect(mockNode.rest.updatePlayer).toHaveBeenCalled();
     });
 
@@ -189,6 +195,7 @@ describe("Player", () => {
       const result = await player.search("never gonna give you up");
 
       expect(result.loadType).toBe("search");
+      expect(result.tracks[0]).toBeInstanceOf(Track);
       expect(mockNode.rest.search).toHaveBeenCalledWith("never gonna give you up", undefined);
     });
 
@@ -201,10 +208,94 @@ describe("Player", () => {
     it("should return the raw load result unchanged", async () => {
       const result = await player.search("test");
 
-      expect(result).toEqual({
-        loadType: "search",
-        data: [MOCK_RAW_TRACK_2],
+      expect(result.loadType).toBe("search");
+      expect(result.tracks).toHaveLength(1);
+      expect(result.tracks[0]?.title).toBe("Test Song");
+    });
+  });
+
+  describe("searchAndPlay", () => {
+    it("should start playback immediately when idle", async () => {
+      const result = await player.searchAndPlay("never gonna give you up");
+
+      expect(result.loadType).toBe("search");
+      expect(player.current?.title).toBe("Test Song");
+      expect(player.queue.isEmpty).toBe(true);
+      expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
+        track: { encoded: MOCK_RAW_TRACK_2.encoded },
       });
+    });
+
+    it("should enqueue when already playing", async () => {
+      player.current = track;
+
+      const result = await player.searchAndPlay("test");
+
+      expect(result.loadType).toBe("search");
+      expect(player.current?.title).toBe("Never Gonna Give You Up");
+      expect(player.queue.size).toBe(1);
+      expect(player.queue.peek()?.title).toBe("Test Song");
+    });
+
+    it("should enqueue all playlist tracks", async () => {
+      mockNode.rest.search = mock(
+        (): Promise<LoadResult> =>
+          Promise.resolve({
+            loadType: "playlist",
+            data: {
+              info: {
+                name: "My Playlist",
+                selectedTrack: 0,
+              },
+              tracks: [MOCK_RAW_TRACK, MOCK_RAW_TRACK_2],
+            },
+          })
+      );
+
+      const result = await player.searchAndPlay("playlist");
+
+      expect(result.loadType).toBe("playlist");
+      expect(player.current?.title).toBe("Never Gonna Give You Up");
+      expect(player.queue.size).toBe(1);
+      expect(player.queue.peek()?.title).toBe("Test Song");
+    });
+
+    it("should not mutate playback state for empty results", async () => {
+      mockNode.rest.search = mock(
+        (): Promise<LoadResult> =>
+          Promise.resolve({
+            loadType: "empty",
+            data: {},
+          })
+      );
+
+      const result = await player.searchAndPlay("missing");
+
+      expect(result.loadType).toBe("empty");
+      expect(player.current).toBeNull();
+      expect(player.queue.isEmpty).toBe(true);
+      expect(mockNode.rest.updatePlayer).not.toHaveBeenCalled();
+    });
+
+    it("should not mutate playback state for error results", async () => {
+      mockNode.rest.search = mock(
+        (): Promise<LoadResult> =>
+          Promise.resolve({
+            loadType: "error",
+            data: {
+              message: "Search failed",
+              severity: "fault",
+              cause: "upstream",
+            },
+          })
+      );
+
+      const result = (await player.searchAndPlay("broken")) as SearchResult;
+
+      expect(result.loadType).toBe("error");
+      expect(player.current).toBeNull();
+      expect(player.queue.isEmpty).toBe(true);
+      expect(mockNode.rest.updatePlayer).not.toHaveBeenCalled();
     });
   });
 });

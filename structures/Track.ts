@@ -34,6 +34,10 @@ export class Track {
     this.sourceName = parsed.info.sourceName;
   }
 
+  static from(data: RawTrack): Track {
+    return new Track(data);
+  }
+
   get durationFormatted(): string {
     if (this.isStream) {
       return "LIVE";

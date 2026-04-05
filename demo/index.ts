@@ -1,6 +1,5 @@
 import { Client, GatewayIntentBits } from "discord.js";
-import { Node, Track } from "../index.ts";
-import type { RawTrack } from "../types.ts";
+import { Node } from "../index.ts";
 
 const TOKEN = process.env.DISCORD_TOKEN;
 
@@ -100,31 +99,21 @@ client.on("messageCreate", async (message) => {
 
     try {
       const player = node.createPlayer(message.guild.id);
-      const res = await player.search(query);
+      const result = await player.searchAndPlay(query);
 
-      if (res.loadType === "empty" || res.loadType === "error") {
+      if (result.loadType === "empty" || result.loadType === "error") {
         await message.reply("No results found or an error occurred.");
         return;
       }
 
-      let track: RawTrack | undefined;
-      if (res.loadType === "playlist") {
-        track = res.data.tracks[0];
-      } else if (res.loadType === "search") {
-        track = res.data[0];
-      } else {
-        track = res.data;
-      }
-
+      const track = result.tracks[0];
       if (!track) {
         await message.reply("No tracks found.");
         return;
       }
 
-      const wrappedTrack = new Track(track);
-      await player.play(wrappedTrack);
-
-      await message.reply(`Now playing: **${wrappedTrack.title}**`);
+      const action = player.current?.encoded === track.encoded ? "Now playing" : "Queued";
+      await message.reply(`${action}: **${track.title}**`);
     } catch (err) {
       console.error(err);
       await message.reply("Failed to load track.");

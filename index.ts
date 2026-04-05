@@ -5,6 +5,8 @@ export { Node } from "./core/Node.ts";
 export { Player } from "./core/Player.ts";
 // Errors
 export { LavalinkRestError, Rest, ValidationError } from "./rest/Rest.ts";
+export { Queue } from "./structures/Queue.ts";
+export type { SearchResult } from "./structures/SearchResult.ts";
 export { Track } from "./structures/Track.ts";
 // Types (re-export)
 export type {

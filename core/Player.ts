@@ -1,8 +1,11 @@
 // core/Player.ts
 
 import type { Rest } from "../rest/Rest.ts";
+import { Queue } from "../structures/Queue.ts";
+import type { SearchResult } from "../structures/SearchResult.ts";
+import { toSearchResult } from "../structures/SearchResult.ts";
 import type { Track } from "../structures/Track.ts";
-import type { LoadResult, PlayerUpdatePayload, SearchProvider } from "../types.ts";
+import type { PlayerUpdatePayload, SearchProvider } from "../types.ts";
 
 const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;
@@ -17,7 +20,7 @@ export interface PlayerNodeAdapter {
 
 export class Player {
   readonly guildId: string;
-  readonly queue: Track[] = [];
+  readonly queue = new Queue();
   current: Track | null = null;
   paused = false;
   volume = 100;
@@ -40,7 +43,7 @@ export class Player {
   }
 
   async play(track?: Track): Promise<void> {
-    const target = track ?? this.queue.shift();
+    const target = track ?? this.queue.dequeue();
 
     if (!target) {
       return;
@@ -85,23 +88,38 @@ export class Player {
 
   async skip(): Promise<void> {
     await this.stop();
-    if (this.queue.length > 0) {
+    if (!this.queue.isEmpty) {
       await this.play();
     }
   }
 
-  search(query: string, provider?: SearchProvider): Promise<LoadResult> {
-    return this.node.rest.search(query, provider);
+  async search(query: string, provider?: SearchProvider): Promise<SearchResult> {
+    const result = await this.node.rest.search(query, provider);
+    return toSearchResult(result);
+  }
+
+  async searchAndPlay(query: string, provider?: SearchProvider): Promise<SearchResult> {
+    const result = await this.search(query, provider);
+
+    if (result.loadType === "empty" || result.loadType === "error" || result.tracks.length === 0) {
+      return result;
+    }
+
+    if (this.current) {
+      this.queue.enqueueMany(result.loadType === "playlist" ? result.tracks : [result.tracks[0]!]);
+      return result;
+    }
+
+    this.queue.enqueueMany(result.loadType === "playlist" ? result.tracks : [result.tracks[0]!]);
+    await this.play();
+    return result;
   }
 
   add(track: Track): void {
-    this.queue.push(track);
+    this.queue.enqueue(track);
   }
 
   remove(index: number): Track | undefined {
-    if (index < 0 || index >= this.queue.length) {
-      return undefined;
-    }
-    return this.queue.splice(index, 1)[0];
+    return this.queue.remove(index);
   }
 }

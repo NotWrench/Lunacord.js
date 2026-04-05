@@ -479,7 +479,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     player: Player,
     reason: "finished" | "loadFailed" | "stopped" | "replaced" | "cleanup"
   ): Promise<void> {
-    if (!this.shouldAutoAdvance(reason) || player.queue.length === 0) {
+    if (!this.shouldAutoAdvance(reason) || player.queue.isEmpty) {
       return;
     }
 
