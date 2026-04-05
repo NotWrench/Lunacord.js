@@ -24,6 +24,8 @@ export type {
 } from "./types.ts";
 // Zod schemas (for consumers who want to validate themselves)
 export {
+  buildSearchIdentifier,
+  DEFAULT_SEARCH_PROVIDER,
   ExceptionSchema,
   FrameStatsSchema,
   LoadResultEmptySchema,
@@ -37,6 +39,7 @@ export {
   PlayerUpdatePayloadSchema,
   PlaylistInfoSchema,
   ReadyPayloadSchema,
+  SearchProvider,
   StatsSchema,
   TrackEndEventSchema,
   TrackEventSchema,

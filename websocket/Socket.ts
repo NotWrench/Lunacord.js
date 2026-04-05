@@ -1,5 +1,4 @@
 // websocket/Socket.ts
-
 import {
   type PlayerUpdate,
   type ReadyPayload,
@@ -31,6 +30,9 @@ interface SocketOptions {
 const INITIAL_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30_000;
 const MAX_RECONNECT_ATTEMPTS = 5;
+
+type JsonPrimitive = boolean | null | number | string;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
 export class Socket extends TypedEventEmitter<SocketEvents> {
   private readonly options: SocketOptions;
@@ -65,7 +67,7 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
     }
   }
 
-  send(data: unknown): void {
+  send(data: JsonValue): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.emit("error", new Error("WebSocket is not connected"));
       return;
@@ -82,7 +84,7 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
     const { host, port, password, userId, numShards, clientName } = this.options;
     const url = `ws://${host}:${port}/v4/websocket`;
 
-    const headers: Record<string, string> = {
+    const headers: Bun.WebSocketOptions["headers"] = {
       Authorization: password,
       "User-Id": userId,
       "Num-Shards": String(numShards),
@@ -93,7 +95,7 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
       headers["Session-Id"] = this.sessionId;
     }
 
-    this.ws = new WebSocket(url, { headers } as unknown as string[]);
+    this.ws = new WebSocket(url, { headers });
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
@@ -116,11 +118,16 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
     };
   }
 
-  private handleMessage(raw: unknown): void {
+  private handleMessage(raw: string | Blob | ArrayBufferLike): void {
     let parsed: unknown;
 
     try {
-      parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (typeof raw === "string") {
+        parsed = JSON.parse(raw);
+      } else {
+        this.emit("error", new Error("Unsupported WebSocket message type"));
+        return;
+      }
     } catch {
       this.emit("error", new Error("Failed to parse WebSocket message"));
       return;

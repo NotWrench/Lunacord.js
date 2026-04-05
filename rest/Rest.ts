@@ -1,9 +1,11 @@
 import type { z } from "zod";
 import {
+  buildSearchIdentifier,
   type LoadResult,
   LoadResultSchema,
   type PlayerUpdatePayload,
   type RawTrack,
+  type SearchProvider,
   type Session,
   SessionSchema,
   TrackSchema,
@@ -38,6 +40,7 @@ interface RestOptions {
 }
 
 const TRAILING_SLASH = /\/$/;
+const DEFAULT_ERROR_MESSAGE = "Request failed";
 
 export class Rest {
   private readonly baseUrl: string;
@@ -55,12 +58,37 @@ export class Rest {
     };
   }
 
+  private async parseErrorMessage(response: Response): Promise<string> {
+    try {
+      const errorBody = (await response.json()) as { message?: string };
+      if (errorBody.message) {
+        return errorBody.message;
+      }
+    } catch {
+      // Ignore invalid error payloads and fall back to HTTP metadata.
+    }
+
+    return response.statusText || `HTTP ${response.status}` || DEFAULT_ERROR_MESSAGE;
+  }
+
   private async request<T>(
     method: string,
     path: string,
     schema: z.ZodType<T>,
     body?: unknown
-  ): Promise<T> {
+  ): Promise<T>;
+  private async request(
+    method: string,
+    path: string,
+    schema?: undefined,
+    body?: unknown
+  ): Promise<void>;
+  private async request<T>(
+    method: string,
+    path: string,
+    schema?: z.ZodType<T>,
+    body?: unknown
+  ): Promise<T | void> {
     const url = `${this.baseUrl}${path}`;
     const init: RequestInit = {
       method,
@@ -74,17 +102,12 @@ export class Rest {
     const response = await fetch(url, init);
 
     if (!response.ok) {
-      let message = `HTTP ${response.status}`;
-      try {
-        const errorBody = (await response.json()) as { message?: string };
-        if (errorBody.message) {
-          message = errorBody.message;
-        }
-      } catch {
-        // Body wasn't JSON; use status text
-        message = response.statusText || message;
-      }
+      const message = await this.parseErrorMessage(response);
       throw new LavalinkRestError(message, response.status, path);
+    }
+
+    if (!schema) {
+      return;
     }
 
     const data: unknown = await response.json();
@@ -97,36 +120,13 @@ export class Rest {
     return result.data;
   }
 
-  private async requestVoid(method: string, path: string, body?: unknown): Promise<void> {
-    const url = `${this.baseUrl}${path}`;
-    const init: RequestInit = {
-      method,
-      headers: this.headers,
-    };
-
-    if (body !== undefined) {
-      init.body = JSON.stringify(body);
-    }
-
-    const response = await fetch(url, init);
-
-    if (!response.ok) {
-      let message = `HTTP ${response.status}`;
-      try {
-        const errorBody = (await response.json()) as { message?: string };
-        if (errorBody.message) {
-          message = errorBody.message;
-        }
-      } catch {
-        message = response.statusText || message;
-      }
-      throw new LavalinkRestError(message, response.status, path);
-    }
+  loadTracks(identifier: string): Promise<LoadResult> {
+    const encodedIdentifier = encodeURIComponent(identifier);
+    return this.request("GET", `/v4/loadtracks?identifier=${encodedIdentifier}`, LoadResultSchema);
   }
 
-  loadTracks(identifier: string): Promise<LoadResult> {
-    const encoded = encodeURIComponent(identifier);
-    return this.request("GET", `/v4/loadtracks?identifier=${encoded}`, LoadResultSchema);
+  search(query: string, provider?: SearchProvider): Promise<LoadResult> {
+    return this.loadTracks(buildSearchIdentifier(query, provider));
   }
 
   decodeTrack(encodedTrack: string): Promise<RawTrack> {
@@ -135,15 +135,16 @@ export class Rest {
   }
 
   updatePlayer(sessionId: string, guildId: string, payload: PlayerUpdatePayload): Promise<void> {
-    return this.requestVoid(
+    return this.request(
       "PATCH",
       `/v4/sessions/${sessionId}/players/${guildId}?noReplace=false`,
+      undefined,
       payload
     );
   }
 
   destroyPlayer(sessionId: string, guildId: string): Promise<void> {
-    return this.requestVoid("DELETE", `/v4/sessions/${sessionId}/players/${guildId}`);
+    return this.request("DELETE", `/v4/sessions/${sessionId}/players/${guildId}`);
   }
 
   updateSession(sessionId: string, resuming: boolean, timeout?: number): Promise<Session> {

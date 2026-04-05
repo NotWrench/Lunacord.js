@@ -30,6 +30,9 @@ interface NodeOptions {
 }
 
 const DEFAULT_CLIENT_NAME = "lavalink-client";
+const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
+const AUTO_ADVANCE_REASONS = new Set(["finished", "loadFailed"] as const);
+type AutoAdvanceReason = "finished" | "loadFailed";
 
 export class Node extends TypedEventEmitter<NodeEvents> {
   sessionId: string | null = null;
@@ -38,6 +41,8 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
   private readonly options: NodeOptions;
   private readonly players = new Map<string, Player>();
+  private connectPromise: Promise<void> | null = null;
+  private connectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: NodeOptions) {
     super();
@@ -62,8 +67,46 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     this.setupSocketListeners();
   }
 
-  connect(): void {
-    this.socket.connect();
+  connect(): Promise<void> {
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
+
+    this.connectPromise = new Promise<void>((resolve, reject) => {
+      const cleanup = (): void => {
+        this.socket.off("ready", handleReady);
+        this.socket.off("error", handleError);
+
+        if (this.connectTimeout) {
+          clearTimeout(this.connectTimeout);
+          this.connectTimeout = null;
+        }
+
+        this.connectPromise = null;
+      };
+
+      const handleReady = (): void => {
+        cleanup();
+        resolve();
+      };
+
+      const handleError = (error: Error): void => {
+        cleanup();
+        reject(error);
+      };
+
+      this.socket.once("ready", handleReady);
+      this.socket.once("error", handleError);
+
+      this.connectTimeout = setTimeout(() => {
+        cleanup();
+        reject(new Error(`Timed out connecting to Lavalink after ${DEFAULT_CONNECT_TIMEOUT_MS}ms`));
+      }, DEFAULT_CONNECT_TIMEOUT_MS);
+
+      this.socket.connect();
+    });
+
+    return this.connectPromise;
   }
 
   createPlayer(guildId: string): Player {
@@ -159,12 +202,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
         const track = new Track(event.track);
         player.current = null;
         this.emit("trackEnd", { player, track, reason: event.reason });
-        // Auto-advance queue
-        if (player.queue.length > 0) {
-          player.play().catch((err: unknown) => {
-            this.emit("error", err instanceof Error ? err : new Error(String(err)));
-          });
-        }
+        void this.handleQueueAdvance(player, event.reason);
         break;
       }
 
@@ -201,5 +239,26 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       default:
         break;
     }
+  }
+
+  private async handleQueueAdvance(
+    player: Player,
+    reason: "finished" | "loadFailed" | "stopped" | "replaced" | "cleanup"
+  ): Promise<void> {
+    if (!this.shouldAutoAdvance(reason) || player.queue.length === 0) {
+      return;
+    }
+
+    try {
+      await player.play();
+    } catch (error) {
+      this.emit("error", error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  private shouldAutoAdvance(
+    reason: "finished" | "loadFailed" | "stopped" | "replaced" | "cleanup"
+  ): reason is AutoAdvanceReason {
+    return AUTO_ADVANCE_REASONS.has(reason as AutoAdvanceReason);
   }
 }

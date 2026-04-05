@@ -1,9 +1,9 @@
 // tests/player.test.ts
 import { beforeEach, describe, expect, it, mock } from "bun:test";
-import type { Node } from "../core/Node.ts";
+import type { PlayerNodeAdapter } from "../core/Player.ts";
 import { Player } from "../core/Player.ts";
 import { Track } from "../structures/Track.ts";
-import type { RawTrack } from "../types.ts";
+import { type LoadResult, type RawTrack, SearchProvider } from "../types.ts";
 
 const MOCK_RAW_TRACK: RawTrack = {
   encoded: "QAABJAMACk5ldmVyIEdvbm5h...",
@@ -39,22 +39,34 @@ const MOCK_RAW_TRACK_2: RawTrack = {
   },
 };
 
-const createMockNode = (): Node => {
+const createMockNode = (): PlayerNodeAdapter => {
   const updatePlayer = mock(() => Promise.resolve());
-  const destroyPlayer = mock(() => Promise.resolve());
+  const search = mock(
+    (query: string, provider?: SearchProvider): Promise<LoadResult> =>
+      Promise.resolve({
+        loadType: "search",
+        data: [MOCK_RAW_TRACK_2],
+      })
+  );
 
   return {
     sessionId: "test-session",
     rest: {
+      loadTracks: mock(() =>
+        Promise.resolve({
+          loadType: "search",
+          data: [MOCK_RAW_TRACK],
+        } satisfies LoadResult)
+      ),
+      search,
       updatePlayer,
-      destroyPlayer,
     },
-  } as unknown as Node;
+  };
 };
 
 describe("Player", () => {
   let player: Player;
-  let mockNode: Node;
+  let mockNode: PlayerNodeAdapter;
   let track: Track;
   let track2: Track;
 
@@ -168,6 +180,30 @@ describe("Player", () => {
       expect(player.volume).toBe(1000);
       expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
         volume: 1000,
+      });
+    });
+  });
+
+  describe("search", () => {
+    it("should use youtube as the default search provider", async () => {
+      const result = await player.search("never gonna give you up");
+
+      expect(result.loadType).toBe("search");
+      expect(mockNode.rest.search).toHaveBeenCalledWith("never gonna give you up", undefined);
+    });
+
+    it("should pass the explicit provider through to rest.search", async () => {
+      await player.search("rick astley", SearchProvider.SoundCloud);
+
+      expect(mockNode.rest.search).toHaveBeenCalledWith("rick astley", SearchProvider.SoundCloud);
+    });
+
+    it("should return the raw load result unchanged", async () => {
+      const result = await player.search("test");
+
+      expect(result).toEqual({
+        loadType: "search",
+        data: [MOCK_RAW_TRACK_2],
       });
     });
   });

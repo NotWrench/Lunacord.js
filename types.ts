@@ -1,6 +1,22 @@
 // types.ts
 import { z } from "zod";
 
+export enum SearchProvider {
+  YouTube = "ytsearch",
+  YouTubeMusic = "ytmsearch",
+  SoundCloud = "scsearch",
+  Spotify = "spsearch",
+  Deezer = "dzsearch",
+  AppleMusic = "amsearch",
+}
+
+export const DEFAULT_SEARCH_PROVIDER = SearchProvider.YouTube;
+
+export const buildSearchIdentifier = (
+  query: string,
+  provider: SearchProvider = DEFAULT_SEARCH_PROVIDER
+): string => `${provider}:${query}`;
+
 // --- Exception ---
 
 export const ExceptionSchema = z.object({

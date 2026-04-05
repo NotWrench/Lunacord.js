@@ -1,9 +1,16 @@
 // core/Player.ts
+
+import type { Rest } from "../rest/Rest.ts";
 import type { Track } from "../structures/Track.ts";
-import type { Node } from "./Node.ts";
+import type { LoadResult, SearchProvider } from "../types.ts";
 
 const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;
+
+export interface PlayerNodeAdapter {
+  readonly rest: Pick<Rest, "loadTracks" | "search" | "updatePlayer">;
+  readonly sessionId: string | null;
+}
 
 export class Player {
   readonly guildId: string;
@@ -14,9 +21,9 @@ export class Player {
   position = 0;
   connected = false;
 
-  private readonly node: Node;
+  private readonly node: PlayerNodeAdapter;
 
-  constructor(guildId: string, node: Node) {
+  constructor(guildId: string, node: PlayerNodeAdapter) {
     this.guildId = guildId;
     this.node = node;
   }
@@ -71,6 +78,10 @@ export class Player {
     if (this.queue.length > 0) {
       await this.play();
     }
+  }
+
+  search(query: string, provider?: SearchProvider): Promise<LoadResult> {
+    return this.node.rest.search(query, provider);
   }
 
   add(track: Track): void {

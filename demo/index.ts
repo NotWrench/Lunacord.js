@@ -93,7 +93,7 @@ function getVoicePayload(guildId: string) {
   };
 }
 
-client.on("clientReady", () => {
+client.on("clientReady", async () => {
   console.log(`[Discord] Logged in as ${client.user?.tag}`);
 
   node = new Node({
@@ -120,7 +120,14 @@ client.on("clientReady", () => {
   );
   node.on("error", (err) => console.error("[Lavalink] Error:", err.message));
 
-  node.connect();
+  try {
+    await node.connect();
+  } catch (error) {
+    console.error(
+      "[Lavalink] Failed to connect:",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
 });
 
 client.on("messageCreate", async (message) => {
@@ -159,14 +166,13 @@ client.on("messageCreate", async (message) => {
       // Wait for Discord to send us voice credentials
       await waitForVoice(message.guild.id);
 
-      const res = await node.rest.loadTracks(`ytsearch:${query}`);
+      const player = node.createPlayer(message.guild.id);
+      const res = await player.search(query);
 
       if (res.loadType === "empty" || res.loadType === "error") {
         await message.reply("No results found or an error occurred.");
         return;
       }
-
-      const player = node.createPlayer(message.guild.id);
 
       let track: RawTrack | undefined;
       if (res.loadType === "playlist") {
