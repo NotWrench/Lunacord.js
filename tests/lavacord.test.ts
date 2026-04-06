@@ -164,6 +164,40 @@ describe("Lavacord", () => {
     expect(errors).toEqual(["node-a:node failed"]);
   });
 
+  it("should re-emit playerDestroy with node context", () => {
+    const lavacord = new Lavacord(BASE_OPTIONS);
+    const node = lavacord.getNode("node-a")!;
+    const events: string[] = [];
+
+    lavacord.on("playerDestroy", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:${guildId}`);
+    });
+
+    node.emit("playerDestroy", { guildId: "guild-123" });
+
+    expect(events).toEqual(["node-a:guild-123"]);
+  });
+
+  it("should re-emit ws with node context", () => {
+    const lavacord = new Lavacord(BASE_OPTIONS);
+    const node = lavacord.getNode("node-a")!;
+    const events: string[] = [];
+
+    lavacord.on("ws", (event) => {
+      if (event.type === "nodeReconnecting") {
+        events.push(`${event.node.id}:${event.attempt}:${event.delay}`);
+      }
+    });
+
+    node.emit("ws", {
+      type: "nodeReconnecting",
+      attempt: 1,
+      delay: 1_000,
+    });
+
+    expect(events).toEqual(["node-a:1:1000"]);
+  });
+
   it("should route voice packets to the owning node", () => {
     const lavacord = new Lavacord(BASE_OPTIONS);
     const [nodeA, nodeB] = lavacord.getNodes();

@@ -65,6 +65,29 @@ client.on("clientReady", async () => {
       exception.cause ? `\n  Cause: ${exception.cause}` : ""
     )
   );
+  lavacord.on("ws", (event) => {
+    switch (event.type) {
+      case "nodeReconnecting":
+        console.warn(
+          `[Lavalink] Node ${event.node.id} reconnecting (attempt ${event.attempt}, retry in ${event.delay}ms)`
+        );
+        break;
+      case "nodeDisconnect":
+        console.warn(
+          `[Lavalink] Node ${event.node.id} disconnected (${event.code} ${event.reason})`
+        );
+        break;
+      case "voiceSocketClosed": {
+        const source = event.byRemote ? "remote" : "local";
+        console.warn(
+          `[Lavalink] Voice websocket closed (${source}) for guild ${event.guildId} on ${event.node.id}: ${event.code} ${event.reason}`
+        );
+        break;
+      }
+      default:
+        break;
+    }
+  });
   lavacord.on("error", (err) => console.error("[Lavalink] Error:", err.message));
 
   try {

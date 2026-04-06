@@ -14,6 +14,25 @@ import { TypedEventEmitter } from "../utils/EventEmitter.ts";
 import { Socket } from "../websocket/Socket.ts";
 import { Player } from "./Player.ts";
 
+export type NodeWsEvent =
+  | {
+      type: "nodeDisconnect";
+      code: number;
+      reason: string;
+    }
+  | {
+      type: "nodeReconnecting";
+      attempt: number;
+      delay: number;
+    }
+  | {
+      type: "voiceSocketClosed";
+      guildId: string;
+      code: number;
+      reason: string;
+      byRemote: boolean;
+    };
+
 export interface NodeEvents {
   error: Error;
   playerDestroy: { guildId: string };
@@ -24,6 +43,7 @@ export interface NodeEvents {
   trackException: { player: Player; track: Track; exception: Exception };
   trackStart: { player: Player; track: Track };
   trackStuck: { player: Player; track: Track; thresholdMs: number };
+  ws: NodeWsEvent;
 }
 
 export interface NodeOptions {
@@ -350,8 +370,20 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       this.emit("error", error);
     });
 
+    this.socket.on("reconnecting", ({ attempt, delay }) => {
+      this.emit("ws", {
+        type: "nodeReconnecting",
+        attempt,
+        delay,
+      });
+    });
+
     this.socket.on("close", ({ code, reason }) => {
-      this.emit("error", new Error(`WebSocket closed: ${code} ${reason}`));
+      this.emit("ws", {
+        type: "nodeDisconnect",
+        code,
+        reason,
+      });
     });
   }
 
@@ -380,6 +412,22 @@ export class Node extends TypedEventEmitter<NodeEvents> {
   }
 
   private handleTrackEvent(event: TrackEvent): void {
+    if (event.type === "WebSocketClosedEvent") {
+      const player = this.players.get(event.guildId);
+      if (player) {
+        player.connected = false;
+      }
+
+      this.emit("ws", {
+        type: "voiceSocketClosed",
+        guildId: event.guildId,
+        code: event.code,
+        reason: event.reason,
+        byRemote: event.byRemote,
+      });
+      return;
+    }
+
     const player = this.players.get(event.guildId);
     if (!player) {
       return;
@@ -420,16 +468,6 @@ export class Node extends TypedEventEmitter<NodeEvents> {
         });
         break;
       }
-
-      case "WebSocketClosedEvent":
-        player.connected = false;
-        this.emit(
-          "error",
-          new Error(
-            `Voice WebSocket closed for guild ${event.guildId}: ${event.code} ${event.reason}`
-          )
-        );
-        break;
 
       default:
         break;

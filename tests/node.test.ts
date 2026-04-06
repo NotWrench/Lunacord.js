@@ -263,5 +263,81 @@ describe("Node", () => {
       expect(sendGatewayPayload).not.toHaveBeenCalled();
       expect(player.isConnected).toBe(true);
     });
+
+    it("should emit voiceSocketClosed ws events and not emit error for WebSocketClosedEvent", () => {
+      const player = node.createPlayer("guild-123");
+      player.connected = true;
+      const wsEvents: string[] = [];
+      const errors: Error[] = [];
+
+      node.on("ws", (event) => {
+        if (event.type === "voiceSocketClosed") {
+          wsEvents.push(
+            `${event.guildId}:${event.code}:${event.reason}:${event.byRemote ? "remote" : "local"}`
+          );
+        }
+      });
+      node.on("error", (error) => {
+        errors.push(error);
+      });
+
+      node.socket.emit("event", {
+        op: "event",
+        guildId: "guild-123",
+        type: "WebSocketClosedEvent",
+        code: 4014,
+        reason: "Disconnected",
+        byRemote: true,
+      });
+
+      node.socket.emit("event", {
+        op: "event",
+        guildId: "guild-999",
+        type: "WebSocketClosedEvent",
+        code: 1000,
+        reason: "No player",
+        byRemote: false,
+      });
+
+      expect(player.isConnected).toBe(false);
+      expect(wsEvents).toEqual([
+        "guild-123:4014:Disconnected:remote",
+        "guild-999:1000:No player:local",
+      ]);
+      expect(errors).toHaveLength(0);
+    });
+
+    it("should emit nodeDisconnect ws events when socket closes", () => {
+      const wsEvents: string[] = [];
+      const errors: Error[] = [];
+
+      node.on("ws", (event) => {
+        if (event.type === "nodeDisconnect") {
+          wsEvents.push(`${event.code}:${event.reason}`);
+        }
+      });
+      node.on("error", (error) => {
+        errors.push(error);
+      });
+
+      node.socket.emit("close", { code: 1006, reason: "Connection lost" });
+
+      expect(wsEvents).toEqual(["1006:Connection lost"]);
+      expect(errors).toHaveLength(0);
+    });
+
+    it("should emit nodeReconnecting ws events when socket reconnects", () => {
+      const wsEvents: string[] = [];
+
+      node.on("ws", (event) => {
+        if (event.type === "nodeReconnecting") {
+          wsEvents.push(`${event.attempt}:${event.delay}`);
+        }
+      });
+
+      node.socket.emit("reconnecting", { attempt: 2, delay: 2_000 });
+
+      expect(wsEvents).toEqual(["2:2000"]);
+    });
   });
 });

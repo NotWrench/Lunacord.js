@@ -27,17 +27,9 @@ export interface LavacordOptions {
 }
 
 type NodeBound<T> = T & { node: Node };
+type NodeBoundEvents = { [K in keyof NodeEvents]: NodeBound<NodeEvents[K]> };
 
-export interface LavacordEvents {
-  error: NodeBound<NodeEvents["error"]>;
-  playerUpdate: NodeBound<NodeEvents["playerUpdate"]>;
-  ready: NodeBound<NodeEvents["ready"]>;
-  stats: NodeBound<NodeEvents["stats"]>;
-  trackEnd: NodeBound<NodeEvents["trackEnd"]>;
-  trackException: NodeBound<NodeEvents["trackException"]>;
-  trackStart: NodeBound<NodeEvents["trackStart"]>;
-  trackStuck: NodeBound<NodeEvents["trackStuck"]>;
-}
+export interface LavacordEvents extends NodeBoundEvents {}
 
 export class Lavacord extends TypedEventEmitter<LavacordEvents> {
   private readonly nodes = new Map<string, Node>();
@@ -190,8 +182,10 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
   }
 
   private bindNodeEvents(node: Node): void {
-    node.on("playerDestroy", ({ guildId }) => {
+    node.on("playerDestroy", (payload) => {
+      const { guildId } = payload;
       this.playerNodes.delete(guildId);
+      this.emit("playerDestroy", { ...payload, node });
     });
     node.on("ready", (payload) => {
       this.emit("ready", { ...payload, node });
@@ -216,6 +210,9 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
     });
     node.on("trackStuck", (payload) => {
       this.emit("trackStuck", { ...payload, node });
+    });
+    node.on("ws", (payload) => {
+      this.emit("ws", { ...payload, node });
     });
   }
 
