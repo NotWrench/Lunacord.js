@@ -207,5 +207,24 @@ describe("Node", () => {
         selfMute: false,
       });
     });
+
+    it("should send a gateway voice connect when connectVoice is called", async () => {
+      const setVoiceState = mock(() => Promise.resolve());
+      const nodeWithVoiceAdapter = new Node({
+        ...NODE_OPTIONS,
+        setVoiceState,
+      });
+      const player = nodeWithVoiceAdapter.createPlayer("guild-789");
+
+      await nodeWithVoiceAdapter.connectVoice("guild-789", "channel-789");
+
+      expect(setVoiceState).toHaveBeenCalledWith({
+        channelId: "channel-789",
+        guildId: "guild-789",
+        selfDeaf: true,
+        selfMute: false,
+      });
+      expect(player.isConnected).toBe(true);
+    });
   });
 });

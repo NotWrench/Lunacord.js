@@ -137,6 +137,24 @@ describe("Player", () => {
     });
   });
 
+  describe("connect", () => {
+    it("should connect via node adapter and expose connected state", async () => {
+      const connectVoice = mock(() => Promise.resolve());
+      mockNode.connectVoice = connectVoice;
+
+      await player.connect("channel-123");
+
+      expect(connectVoice).toHaveBeenCalledWith("guild-123", "channel-123", undefined);
+      expect(player.isConnected).toBe(true);
+    });
+
+    it("should throw when node adapter does not expose connectVoice", async () => {
+      await expect(player.connect("channel-123")).rejects.toThrow(
+        "Player node adapter does not expose connectVoice"
+      );
+    });
+  });
+
   describe("pause", () => {
     it("should send paused=true via REST", async () => {
       await player.pause(true);

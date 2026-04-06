@@ -1,6 +1,7 @@
 // index.ts
 
 // Classes
+export { Lavacord } from "./core/Lavacord.ts";
 export { Node } from "./core/Node.ts";
 export { Player } from "./core/Player.ts";
 // Errors

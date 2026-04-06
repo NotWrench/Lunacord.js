@@ -14,8 +14,9 @@ import { TypedEventEmitter } from "../utils/EventEmitter.ts";
 import { Socket } from "../websocket/Socket.ts";
 import { Player } from "./Player.ts";
 
-interface NodeEvents {
+export interface NodeEvents {
   error: Error;
+  playerDestroy: { guildId: string };
   playerUpdate: { guildId: string; state: PlayerState };
   ready: ReadyPayload;
   stats: Stats;
@@ -25,9 +26,10 @@ interface NodeEvents {
   trackStuck: { player: Player; track: Track; thresholdMs: number };
 }
 
-interface NodeOptions {
+export interface NodeOptions {
   clientName?: string;
   host: string;
+  id?: string;
   numShards: number;
   password: string;
   port: number;
@@ -37,16 +39,27 @@ interface NodeOptions {
   userId: string;
 }
 
-interface VoiceStateUpdateRequest {
+export interface VoiceStateUpdateRequest {
   channelId: string | null;
   guildId: string;
   selfDeaf: boolean;
   selfMute: boolean;
 }
 
+export interface VoiceConnectOptions {
+  selfDeaf?: boolean;
+  selfMute?: boolean;
+  timeoutMs?: number;
+}
+
 const DEFAULT_CLIENT_NAME = "lavalink-client";
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
 const DEFAULT_VOICE_TIMEOUT_MS = 10_000;
+const DEFAULT_VOICE_CONNECT_OPTIONS: Required<Pick<VoiceConnectOptions, "selfDeaf" | "selfMute">> =
+  {
+    selfDeaf: true,
+    selfMute: false,
+  };
 const AUTO_ADVANCE_REASONS = new Set(["finished", "loadFailed"] as const);
 type AutoAdvanceReason = "finished" | "loadFailed";
 type VoicePayload = NonNullable<PlayerUpdatePayload["voice"]>;
@@ -68,6 +81,7 @@ interface VoiceWaiter {
 }
 
 export class Node extends TypedEventEmitter<NodeEvents> {
+  readonly id: string;
   sessionId: string | null = null;
   readonly rest: Rest;
   readonly socket: Socket;
@@ -86,6 +100,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     super();
 
     this.options = options;
+    this.id = options.id ?? `${options.host}:${options.port}`;
     const clientName = options.clientName ?? DEFAULT_CLIENT_NAME;
 
     this.rest = new Rest({
@@ -147,6 +162,17 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     return this.connectPromise;
   }
 
+  disconnect(): void {
+    if (this.connectTimeout) {
+      clearTimeout(this.connectTimeout);
+      this.connectTimeout = null;
+    }
+
+    this.connectPromise = null;
+    this.sessionId = null;
+    this.socket.disconnect();
+  }
+
   createPlayer(guildId: string): Player {
     const existing = this.players.get(guildId);
     if (existing) {
@@ -173,10 +199,23 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     this.voiceServers.delete(guildId);
     this.syncedVoiceStateKeys.delete(guildId);
     this.rejectVoiceWaiters(guildId, new Error(`Player destroyed for guild ${guildId}`));
+    this.emit("playerDestroy", { guildId });
   }
 
   getPlayer(guildId: string): Player | undefined {
     return this.players.get(guildId);
+  }
+
+  getPlayers(): Player[] {
+    return [...this.players.values()];
+  }
+
+  get playerCount(): number {
+    return this.players.size;
+  }
+
+  get connected(): boolean {
+    return this.sessionId !== null;
   }
 
   handleVoicePacket(packet: unknown): void {
@@ -215,23 +254,58 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     return this.getVoicePayload(guildId);
   }
 
-  async disconnectVoice(guildId: string): Promise<void> {
+  async connectVoice(
+    guildId: string,
+    channelId: string,
+    options?: VoiceConnectOptions
+  ): Promise<void> {
     const setVoiceState = this.options.setVoiceState;
     if (!setVoiceState) {
-      return;
+      throw new Error("Node was not configured with setVoiceState");
     }
 
+    this.voiceStates.delete(guildId);
+    this.voiceServers.delete(guildId);
+    this.syncedVoiceStateKeys.delete(guildId);
+
+    const connectOptions = { ...DEFAULT_VOICE_CONNECT_OPTIONS, ...options };
     await setVoiceState({
-      channelId: null,
+      channelId,
       guildId,
-      selfDeaf: false,
-      selfMute: false,
+      selfDeaf: connectOptions.selfDeaf,
+      selfMute: connectOptions.selfMute,
     });
+
+    if (this.voicePacketForwardingEnabled) {
+      await this.waitForVoice(guildId, connectOptions.timeoutMs ?? DEFAULT_VOICE_TIMEOUT_MS);
+    }
+
+    const player = this.players.get(guildId);
+    if (player) {
+      player.connected = true;
+    }
+  }
+
+  async disconnectVoice(guildId: string): Promise<void> {
+    const setVoiceState = this.options.setVoiceState;
+    if (setVoiceState) {
+      await setVoiceState({
+        channelId: null,
+        guildId,
+        selfDeaf: false,
+        selfMute: false,
+      });
+    }
 
     this.voiceStates.delete(guildId);
     this.voiceServers.delete(guildId);
     this.syncedVoiceStateKeys.delete(guildId);
     this.rejectVoiceWaiters(guildId, new Error(`Voice connection was closed for guild ${guildId}`));
+
+    const player = this.players.get(guildId);
+    if (player) {
+      player.connected = false;
+    }
   }
 
   private setupSocketListeners(): void {
@@ -379,6 +453,11 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
     const channelIdValue = packetData["channel_id"];
     if (channelIdValue === null) {
+      const player = this.players.get(guildId);
+      if (player) {
+        player.connected = false;
+      }
+
       this.voiceStates.delete(guildId);
       this.voiceServers.delete(guildId);
       this.syncedVoiceStateKeys.delete(guildId);
@@ -397,6 +476,12 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     this.voiceStates.set(guildId, { sessionId, channelId });
+
+    const player = this.players.get(guildId);
+    if (player) {
+      player.connected = true;
+    }
+
     this.resolveVoiceWaiters(guildId);
     void this.trySyncVoiceState(guildId);
   }

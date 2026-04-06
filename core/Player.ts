@@ -6,11 +6,17 @@ import type { SearchResult } from "../structures/SearchResult.ts";
 import { toSearchResult } from "../structures/SearchResult.ts";
 import type { Track } from "../structures/Track.ts";
 import type { PlayerUpdatePayload, SearchProvider } from "../types.ts";
+import type { VoiceConnectOptions } from "./Node.ts";
 
 const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;
 
 export interface PlayerNodeAdapter {
+  connectVoice?: (
+    guildId: string,
+    channelId: string,
+    options?: VoiceConnectOptions
+  ) => Promise<void>;
   destroyPlayer?: (guildId: string) => Promise<void>;
   disconnectVoice?: (guildId: string) => Promise<void>;
   resolveVoicePayload?: (
@@ -42,6 +48,19 @@ export class Player {
       throw new Error("Node is not connected — sessionId is null");
     }
     return sessionId;
+  }
+
+  get isConnected(): boolean {
+    return this.connected;
+  }
+
+  async connect(channelId: string, options?: VoiceConnectOptions): Promise<void> {
+    if (!this.node.connectVoice) {
+      throw new Error("Player node adapter does not expose connectVoice");
+    }
+
+    await this.node.connectVoice(this.guildId, channelId, options);
+    this.connected = true;
   }
 
   async play(track?: Track): Promise<void> {

@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits } from "discord.js";
-import { Node } from "../index.ts";
+import { Lavacord } from "../index.ts";
 
 const TOKEN = process.env.DISCORD_TOKEN;
 
@@ -17,26 +17,30 @@ const client = new Client({
   ],
 });
 
-let node: Node | null = null;
+let lavacord: Lavacord | null = null;
 
 // Forward all Discord raw packets so Lunacord can manage VOICE_* state internally.
 client.on("raw", (packet) => {
-  if (!node) {
+  if (!lavacord) {
     return;
   }
 
-  node.handleVoicePacket(packet);
+  lavacord.handleVoicePacket(packet);
 });
 
 client.on("clientReady", async () => {
   console.log(`[Discord] Logged in as ${client.user?.tag}`);
 
-  node = new Node({
-    host: "localhost",
-    port: 2333,
-    password: "youshallnotpass",
-    numShards: 1,
+  lavacord = new Lavacord({
+    nodes: [
+      {
+        host: "localhost",
+        port: 2333,
+        password: "youshallnotpass",
+      },
+    ],
     userId: client.user!.id,
+    numShards: 1,
     clientName: "LunacordDemo",
     setVoiceState: ({ guildId, channelId, selfMute, selfDeaf }) => {
       const guild = client.guilds.cache.get(guildId);
@@ -56,12 +60,12 @@ client.on("clientReady", async () => {
     },
   });
 
-  node.on("ready", () => console.log("[Lavalink] Node connected!"));
-  node.on("trackStart", ({ track }) => console.log(`[Lavalink] Playing: ${track.title}`));
-  node.on("trackEnd", ({ track, reason }) =>
+  lavacord.on("ready", ({ node }) => console.log(`[Lavalink] Node connected: ${node.id}`));
+  lavacord.on("trackStart", ({ track }) => console.log(`[Lavalink] Playing: ${track.title}`));
+  lavacord.on("trackEnd", ({ track, reason }) =>
     console.log(`[Lavalink] Track ended: ${track.title} (${reason})`)
   );
-  node.on("trackException", ({ track, exception }) =>
+  lavacord.on("trackException", ({ track, exception }) =>
     console.error(
       `[Lavalink] Track exception: ${track.title}`,
       `\n  Severity: ${exception.severity}`,
@@ -69,10 +73,10 @@ client.on("clientReady", async () => {
       exception.cause ? `\n  Cause: ${exception.cause}` : ""
     )
   );
-  node.on("error", (err) => console.error("[Lavalink] Error:", err.message));
+  lavacord.on("error", (err) => console.error("[Lavalink] Error:", err.message));
 
   try {
-    await node.connect();
+    await lavacord.connect();
   } catch (error) {
     console.error(
       "[Lavalink] Failed to connect:",
@@ -82,7 +86,7 @@ client.on("clientReady", async () => {
 });
 
 client.on("messageCreate", async (message) => {
-  if (message.author.bot || !message.guild || !node) {
+  if (message.author.bot || !message.guild || !lavacord) {
     return;
   }
 
@@ -102,19 +106,9 @@ client.on("messageCreate", async (message) => {
       return;
     }
 
-    // Join VC via gateway OP 4
-    message.guild.shard.send({
-      op: 4,
-      d: {
-        guild_id: message.guild.id,
-        channel_id: voiceChannel.id,
-        self_mute: false,
-        self_deaf: true,
-      },
-    });
-
     try {
-      const player = node.createPlayer(message.guild.id);
+      const player = lavacord.createPlayer(message.guild.id);
+      await player.connect(voiceChannel.id);
       const result = await player.searchAndPlay(query);
 
       if (result.loadType === "empty" || result.loadType === "error") {
@@ -137,7 +131,7 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "!skip") {
-    const player = node.getPlayer(message.guild.id);
+    const player = lavacord.getPlayer(message.guild.id);
     if (!(player && player.current)) {
       await message.reply("Nothing is playing.");
       return;
@@ -147,7 +141,7 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "!stop") {
-    const player = node.getPlayer(message.guild.id);
+    const player = lavacord.getPlayer(message.guild.id);
     if (!player) {
       await message.reply("Nothing is playing.");
       return;
