@@ -158,6 +158,53 @@ client.on("messageCreate", async (message) => {
     await message.reply("Skipped!");
   }
 
+  if (command === "!filter") {
+    const preset = args.shift()?.toLowerCase();
+    const player = lavacord.getPlayer(message.guild.id);
+    if (!(player && player.current)) {
+      await message.reply("Nothing is playing.");
+      return;
+    }
+
+    if (!preset) {
+      await message.reply("Usage: `!filter <bassboost|nightcore|vaporwave|karaoke|clear>`");
+      return;
+    }
+
+    try {
+      switch (preset) {
+        case "bassboost":
+          await player.setBassboost();
+          await message.reply("Applied filter: **bassboost**");
+          break;
+        case "nightcore":
+          await player.setNightcore();
+          await message.reply("Applied filter: **nightcore**");
+          break;
+        case "vaporwave":
+          await player.setVaporwave();
+          await message.reply("Applied filter: **vaporwave**");
+          break;
+        case "karaoke":
+          await player.setKaraoke();
+          await message.reply("Applied filter: **karaoke**");
+          break;
+        case "clear":
+          await player.clearFilters();
+          await message.reply("Cleared all filters.");
+          break;
+        default:
+          await message.reply(
+            "Unknown filter. Use `bassboost`, `nightcore`, `vaporwave`, `karaoke`, or `clear`."
+          );
+          break;
+      }
+    } catch (error) {
+      console.error(error);
+      await message.reply("Failed to update filters.");
+    }
+  }
+
   if (command === "!stop") {
     const player = lavacord.getPlayer(message.guild.id);
     if (!player) {

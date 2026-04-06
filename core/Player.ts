@@ -5,11 +5,44 @@ import { Queue } from "../structures/Queue.ts";
 import type { SearchResult } from "../structures/SearchResult.ts";
 import { toSearchResult } from "../structures/SearchResult.ts";
 import type { Track } from "../structures/Track.ts";
-import type { PlayerUpdatePayload, SearchProvider } from "../types.ts";
+import type { Filters, PlayerUpdatePayload, SearchProvider } from "../types.ts";
 import type { VoiceConnectOptions } from "./Node.ts";
 
 const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;
+
+const BASSBOOST_FILTERS: Filters = {
+  equalizer: [
+    { band: 0, gain: 0.15 },
+    { band: 1, gain: 0.125 },
+    { band: 2, gain: 0.1 },
+  ],
+};
+
+const NIGHTCORE_FILTERS: Filters = {
+  timescale: {
+    pitch: 1.2,
+    rate: 1.0,
+    speed: 1.15,
+  },
+};
+
+const VAPORWAVE_FILTERS: Filters = {
+  timescale: {
+    pitch: 0.85,
+    rate: 1.0,
+    speed: 0.8,
+  },
+};
+
+const KARAOKE_FILTERS: Filters = {
+  karaoke: {
+    filterBand: 220,
+    filterWidth: 100,
+    level: 1,
+    monoLevel: 1,
+  },
+};
 
 export type PlayerActionEvent =
   | {
@@ -55,6 +88,16 @@ export type PlayerActionEvent =
       type: "playerVolumeUpdate";
       guildId: string;
       volume: number;
+    }
+  | {
+      filters: Filters;
+      guildId: string;
+      type: "playerFiltersClear";
+    }
+  | {
+      filters: Filters;
+      guildId: string;
+      type: "playerFiltersUpdate";
     };
 
 export interface PlayerNodeAdapter {
@@ -75,6 +118,7 @@ export class Player {
   readonly guildId: string;
   readonly queue = new Queue();
   current: Track | null = null;
+  filters: Filters = {};
   paused = false;
   volume = 100;
   position = 0;
@@ -188,6 +232,50 @@ export class Player {
     });
   }
 
+  async setFilters(filters: Filters): Promise<void> {
+    this.filters = cloneFilters(filters);
+    await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, {
+      filters: this.filters,
+    });
+    this.emitActionEvent({
+      type: "playerFiltersUpdate",
+      guildId: this.guildId,
+      filters: this.filters,
+    });
+  }
+
+  async updateFilters(filters: Partial<Filters>): Promise<void> {
+    await this.setFilters(mergeFilters(this.filters, filters));
+  }
+
+  async clearFilters(): Promise<void> {
+    this.filters = {};
+    await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, {
+      filters: this.filters,
+    });
+    this.emitActionEvent({
+      type: "playerFiltersClear",
+      guildId: this.guildId,
+      filters: this.filters,
+    });
+  }
+
+  setBassboost(): Promise<void> {
+    return this.setFilters(BASSBOOST_FILTERS);
+  }
+
+  setNightcore(): Promise<void> {
+    return this.setFilters(NIGHTCORE_FILTERS);
+  }
+
+  setVaporwave(): Promise<void> {
+    return this.setFilters(VAPORWAVE_FILTERS);
+  }
+
+  setKaraoke(): Promise<void> {
+    return this.setFilters(KARAOKE_FILTERS);
+  }
+
   async skip(): Promise<void> {
     const skippedTrack = this.current;
     await this.stop(false, false);
@@ -253,3 +341,30 @@ export class Player {
     return removed;
   }
 }
+
+const cloneFilters = (filters: Filters): Filters => JSON.parse(JSON.stringify(filters)) as Filters;
+
+const mergeFilters = (current: Filters, next: Partial<Filters>): Filters => ({
+  ...current,
+  ...next,
+  channelMix: mergeObject(current.channelMix, next.channelMix),
+  distortion: mergeObject(current.distortion, next.distortion),
+  karaoke: mergeObject(current.karaoke, next.karaoke),
+  lowPass: mergeObject(current.lowPass, next.lowPass),
+  pluginFilters: mergeObject(current.pluginFilters, next.pluginFilters),
+  rotation: mergeObject(current.rotation, next.rotation),
+  timescale: mergeObject(current.timescale, next.timescale),
+  tremolo: mergeObject(current.tremolo, next.tremolo),
+  vibrato: mergeObject(current.vibrato, next.vibrato),
+});
+
+const mergeObject = <T extends object>(current?: T, next?: Partial<T>): T | undefined => {
+  if (!current && !next) {
+    return undefined;
+  }
+
+  return {
+    ...current,
+    ...next,
+  } as T;
+};

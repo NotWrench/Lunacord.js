@@ -12,6 +12,7 @@ export { Track } from "./structures/Track.ts";
 // Types (re-export)
 export type {
   Exception,
+  Filters,
   FrameStats,
   LoadResult,
   PlayerState,

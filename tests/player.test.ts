@@ -5,7 +5,7 @@ import { Player } from "../core/Player.ts";
 import { Queue } from "../structures/Queue.ts";
 import type { SearchResult } from "../structures/SearchResult.ts";
 import { Track } from "../structures/Track.ts";
-import { type LoadResult, type RawTrack, SearchProvider } from "../types.ts";
+import { type Filters, type LoadResult, type RawTrack, SearchProvider } from "../types.ts";
 
 const MOCK_RAW_TRACK: RawTrack = {
   encoded: "QAABJAMACk5ldmVyIEdvbm5h...",
@@ -66,6 +66,25 @@ const createMockNode = (): PlayerNodeAdapter => {
   };
 };
 
+const getMockEvents = (fn: ReturnType<typeof mock>): unknown[] =>
+  (fn.mock.calls as Array<[unknown?]>).map((call) => call[0]);
+
+interface PlayerSkipEvent {
+  guildId: string;
+  nextTrack: Track | null;
+  skippedTrack: Track | null;
+  type: "playerSkip";
+}
+
+const isEventWithType = (
+  event: unknown
+): event is {
+  type: string;
+} => typeof event === "object" && event !== null && "type" in event;
+
+const isPlayerSkipEvent = (event: unknown): event is PlayerSkipEvent =>
+  isEventWithType(event) && event.type === "playerSkip";
+
 describe("Player", () => {
   let player: Player;
   let mockNode: PlayerNodeAdapter;
@@ -113,7 +132,9 @@ describe("Player", () => {
       player.add(track);
       player.remove(0);
 
-      const eventTypes = emitPlayerEvent.mock.calls.map(([event]) => event.type);
+      const eventTypes = getMockEvents(emitPlayerEvent)
+        .filter((event): event is { type: string } => typeof event === "object" && event !== null)
+        .map((event) => event.type);
       expect(eventTypes).toEqual(["playerQueueAdd", "playerQueueRemove"]);
     });
   });
@@ -213,7 +234,9 @@ describe("Player", () => {
       await player.pause(true);
       await player.pause(false);
 
-      const eventTypes = emitPlayerEvent.mock.calls.map(([event]) => event.type);
+      const eventTypes = getMockEvents(emitPlayerEvent)
+        .filter((event): event is { type: string } => typeof event === "object" && event !== null)
+        .map((event) => event.type);
       expect(eventTypes).toEqual(["playerPause", "playerResume"]);
     });
   });
@@ -277,9 +300,7 @@ describe("Player", () => {
       player.add(track2);
       await player.skip();
 
-      const skipEvent = emitPlayerEvent.mock.calls
-        .map(([event]) => event)
-        .find((event) => event.type === "playerSkip");
+      const skipEvent = getMockEvents(emitPlayerEvent).find(isPlayerSkipEvent);
 
       expect(skipEvent).toEqual({
         type: "playerSkip",
@@ -319,6 +340,143 @@ describe("Player", () => {
         type: "playerVolumeUpdate",
         guildId: "guild-123",
         volume: 350,
+      });
+    });
+  });
+
+  describe("filters", () => {
+    it("should set filters and update local state", async () => {
+      const filters: Filters = {
+        timescale: {
+          speed: 1.1,
+        },
+      };
+
+      await player.setFilters(filters);
+
+      expect(player.filters).toEqual(filters);
+      expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
+        filters,
+      });
+    });
+
+    it("should merge partial filter updates", async () => {
+      await player.setFilters({
+        timescale: {
+          speed: 1.1,
+        },
+      });
+
+      await player.updateFilters({
+        timescale: {
+          pitch: 1.2,
+        },
+      });
+
+      expect(player.filters).toEqual({
+        timescale: {
+          pitch: 1.2,
+          speed: 1.1,
+        },
+      });
+      expect(mockNode.rest.updatePlayer).toHaveBeenLastCalledWith("test-session", "guild-123", {
+        filters: {
+          timescale: {
+            pitch: 1.2,
+            speed: 1.1,
+          },
+        },
+      });
+    });
+
+    it("should clear filters", async () => {
+      await player.setFilters({
+        karaoke: {
+          level: 1,
+        },
+      });
+
+      await player.clearFilters();
+
+      expect(player.filters).toEqual({});
+      expect(mockNode.rest.updatePlayer).toHaveBeenLastCalledWith("test-session", "guild-123", {
+        filters: {},
+      });
+    });
+
+    it("should apply preset helpers", async () => {
+      await player.setBassboost();
+      expect(mockNode.rest.updatePlayer).toHaveBeenLastCalledWith("test-session", "guild-123", {
+        filters: {
+          equalizer: [
+            { band: 0, gain: 0.15 },
+            { band: 1, gain: 0.125 },
+            { band: 2, gain: 0.1 },
+          ],
+        },
+      });
+
+      await player.setNightcore();
+      expect(player.filters).toEqual({
+        timescale: {
+          pitch: 1.2,
+          rate: 1,
+          speed: 1.15,
+        },
+      });
+
+      await player.setVaporwave();
+      expect(player.filters).toEqual({
+        timescale: {
+          pitch: 0.85,
+          rate: 1,
+          speed: 0.8,
+        },
+      });
+
+      await player.setKaraoke();
+      expect(player.filters).toEqual({
+        karaoke: {
+          filterBand: 220,
+          filterWidth: 100,
+          level: 1,
+          monoLevel: 1,
+        },
+      });
+    });
+
+    it("should emit filter events", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      await player.setFilters({
+        timescale: {
+          speed: 1.1,
+        },
+      });
+      await player.clearFilters();
+
+      const eventTypes = getMockEvents(emitPlayerEvent)
+        .filter((event): event is { type: string } => typeof event === "object" && event !== null)
+        .map((event) => event.type);
+      expect(eventTypes).toContain("playerFiltersUpdate");
+      expect(eventTypes).toContain("playerFiltersClear");
+    });
+
+    it("should keep filters when playing and skipping", async () => {
+      await player.setNightcore();
+      player.add(track);
+      player.add(track2);
+
+      await player.play();
+      await player.skip();
+
+      expect(player.filters).toEqual({
+        timescale: {
+          pitch: 1.2,
+          rate: 1,
+          speed: 1.15,
+        },
       });
     });
   });
