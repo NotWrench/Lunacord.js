@@ -105,6 +105,17 @@ describe("Player", () => {
       const removed = player.remove(5);
       expect(removed).toBeUndefined();
     });
+
+    it("should emit queue add/remove events", () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      player.add(track);
+      player.remove(0);
+
+      const eventTypes = emitPlayerEvent.mock.calls.map(([event]) => event.type);
+      expect(eventTypes).toEqual(["playerQueueAdd", "playerQueueRemove"]);
+    });
   });
 
   describe("play", () => {
@@ -194,6 +205,17 @@ describe("Player", () => {
         paused: false,
       });
     });
+
+    it("should emit pause and resume events", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      await player.pause(true);
+      await player.pause(false);
+
+      const eventTypes = emitPlayerEvent.mock.calls.map(([event]) => event.type);
+      expect(eventTypes).toEqual(["playerPause", "playerResume"]);
+    });
   });
 
   describe("stop", () => {
@@ -214,6 +236,20 @@ describe("Player", () => {
       expect(disconnectVoice).toHaveBeenCalledWith("guild-123");
       expect(destroyPlayer).toHaveBeenCalledWith("guild-123");
     });
+
+    it("should emit stop events with flags", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      await player.stop(false, true);
+
+      expect(emitPlayerEvent).toHaveBeenCalledWith({
+        type: "playerStop",
+        guildId: "guild-123",
+        destroyPlayer: false,
+        disconnectVoice: true,
+      });
+    });
   });
 
   describe("skip", () => {
@@ -231,6 +267,26 @@ describe("Player", () => {
       expect(disconnectVoice).not.toHaveBeenCalled();
       expect(destroyPlayer).not.toHaveBeenCalled();
       expect(player.current?.encoded).toBe(track2.encoded);
+    });
+
+    it("should emit skip events", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      player.current = track;
+      player.add(track2);
+      await player.skip();
+
+      const skipEvent = emitPlayerEvent.mock.calls
+        .map(([event]) => event)
+        .find((event) => event.type === "playerSkip");
+
+      expect(skipEvent).toEqual({
+        type: "playerSkip",
+        guildId: "guild-123",
+        skippedTrack: track,
+        nextTrack: track2,
+      });
     });
   });
 
@@ -250,6 +306,19 @@ describe("Player", () => {
       expect(player.volume).toBe(1000);
       expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
         volume: 1000,
+      });
+    });
+
+    it("should emit volume update events", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      await player.setVolume(350);
+
+      expect(emitPlayerEvent).toHaveBeenCalledWith({
+        type: "playerVolumeUpdate",
+        guildId: "guild-123",
+        volume: 350,
       });
     });
   });

@@ -35,7 +35,28 @@ export interface LavacordEvents extends NodeBoundEvents {
   nodeDisconnect: NodeBound<Extract<NodeEvents["ws"], { type: "nodeDisconnect" }>>;
   nodeError: NodeBound<NodeEvents["error"]>;
   nodeReconnecting: NodeBound<Extract<NodeEvents["ws"], { type: "nodeReconnecting" }>>;
+  nodeStats: NodeBound<NodeEvents["stats"]>;
   nodeVoiceSocketClosed: NodeBound<NodeEvents["voiceSocketClosed"]>;
+  playerConnect: NodeBound<NodeEvents["playerConnect"]>;
+  playerCreate: NodeBound<NodeEvents["playerCreate"]>;
+  playerDestroy: NodeBound<NodeEvents["playerDestroy"]>;
+  playerDisconnect: NodeBound<NodeEvents["playerDisconnect"]>;
+  playerPause: NodeBound<NodeEvents["playerPause"]>;
+  playerPlay: NodeBound<NodeEvents["playerPlay"]>;
+  playerQueueAdd: NodeBound<NodeEvents["playerQueueAdd"]>;
+  playerQueueRemove: NodeBound<NodeEvents["playerQueueRemove"]>;
+  playerResume: NodeBound<NodeEvents["playerResume"]>;
+  playerSkip: NodeBound<NodeEvents["playerSkip"]>;
+  playerStop: NodeBound<NodeEvents["playerStop"]>;
+  playerUpdate: NodeBound<NodeEvents["playerUpdate"]>;
+  playerVolumeUpdate: NodeBound<NodeEvents["playerVolumeUpdate"]>;
+  ready: NodeBound<NodeEvents["ready"]>;
+  trackEnd: NodeBound<NodeEvents["trackEnd"]>;
+  trackException: NodeBound<NodeEvents["trackException"]>;
+  trackStart: NodeBound<NodeEvents["trackStart"]>;
+  trackStuck: NodeBound<NodeEvents["trackStuck"]>;
+  voiceSocketClosed: NodeBound<NodeEvents["voiceSocketClosed"]>;
+  ws: NodeBound<NodeEvents["ws"]>;
 }
 
 export class Lavacord extends TypedEventEmitter<LavacordEvents> {
@@ -193,10 +214,41 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
   }
 
   private bindNodeEvents(node: Node): void {
+    node.on("playerCreate", (payload) => {
+      this.playerNodes.set(payload.guildId, node.id);
+      this.emit("playerCreate", { ...payload, node });
+    });
+    node.on("playerConnect", (payload) => {
+      this.emit("playerConnect", { ...payload, node });
+    });
+    node.on("playerDisconnect", (payload) => {
+      this.emit("playerDisconnect", { ...payload, node });
+    });
     node.on("playerDestroy", (payload) => {
       const { guildId } = payload;
       this.playerNodes.delete(guildId);
       this.emit("playerDestroy", { ...payload, node });
+    });
+    node.on("playerPause", (payload) => {
+      this.emit("playerPause", { ...payload, node });
+    });
+    node.on("playerPlay", (payload) => {
+      this.emit("playerPlay", { ...payload, node });
+    });
+    node.on("playerQueueAdd", (payload) => {
+      this.emit("playerQueueAdd", { ...payload, node });
+    });
+    node.on("playerQueueRemove", (payload) => {
+      this.emit("playerQueueRemove", { ...payload, node });
+    });
+    node.on("playerResume", (payload) => {
+      this.emit("playerResume", { ...payload, node });
+    });
+    node.on("playerSkip", (payload) => {
+      this.emit("playerSkip", { ...payload, node });
+    });
+    node.on("playerStop", (payload) => {
+      this.emit("playerStop", { ...payload, node });
     });
     node.on("ready", (payload) => {
       this.emit("ready", { ...payload, node });
@@ -211,6 +263,10 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
     });
     node.on("stats", (payload) => {
       this.emit("stats", { ...payload, node });
+      this.emit("nodeStats", { ...payload, node });
+    });
+    node.on("playerVolumeUpdate", (payload) => {
+      this.emit("playerVolumeUpdate", { ...payload, node });
     });
     node.on("trackStart", (payload) => {
       this.emit("trackStart", { ...payload, node });

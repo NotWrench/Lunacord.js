@@ -12,7 +12,7 @@ import type {
 } from "../types.ts";
 import { TypedEventEmitter } from "../utils/EventEmitter.ts";
 import { Socket } from "../websocket/Socket.ts";
-import { Player } from "./Player.ts";
+import { Player, type PlayerActionEvent } from "./Player.ts";
 
 export type NodeWsEvent =
   | {
@@ -33,10 +33,38 @@ export interface VoiceSocketClosedEvent {
   reason: string;
 }
 
+type PlayerActionPayload<T extends PlayerActionEvent["type"]> = Omit<
+  Extract<PlayerActionEvent, { type: T }>,
+  "type"
+>;
+
+export interface PlayerConnectEvent {
+  channelId: string;
+  guildId: string;
+  selfDeaf: boolean;
+  selfMute: boolean;
+}
+
+export interface PlayerDisconnectEvent {
+  guildId: string;
+  reason: "manual" | "voiceSocketClosed" | "voiceStateUpdate";
+}
+
 export interface NodeEvents {
   error: Error;
+  playerConnect: PlayerConnectEvent;
+  playerCreate: { guildId: string; player: Player };
   playerDestroy: { guildId: string };
+  playerDisconnect: PlayerDisconnectEvent;
+  playerPause: PlayerActionPayload<"playerPause">;
+  playerPlay: PlayerActionPayload<"playerPlay">;
+  playerQueueAdd: PlayerActionPayload<"playerQueueAdd">;
+  playerQueueRemove: PlayerActionPayload<"playerQueueRemove">;
+  playerResume: PlayerActionPayload<"playerResume">;
+  playerSkip: PlayerActionPayload<"playerSkip">;
+  playerStop: PlayerActionPayload<"playerStop">;
   playerUpdate: { guildId: string; state: PlayerState };
+  playerVolumeUpdate: PlayerActionPayload<"playerVolumeUpdate">;
   ready: ReadyPayload;
   stats: Stats;
   trackEnd: { player: Player; track: Track; reason: string };
@@ -205,6 +233,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
     const player = new Player(guildId, this);
     this.players.set(guildId, player);
+    this.emit("playerCreate", { guildId, player });
     return player;
   }
 
@@ -275,6 +304,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       throw new Error("Node was not configured with sendGatewayPayload");
     }
 
+    const connectOptions = { ...DEFAULT_VOICE_CONNECT_OPTIONS, ...options };
     const cachedState = this.voiceStates.get(guildId);
     const hasCachedVoice = Boolean(cachedState && this.voiceServers.has(guildId));
     if (cachedState?.channelId === channelId && hasCachedVoice) {
@@ -282,6 +312,13 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       if (player) {
         player.connected = true;
       }
+
+      this.emit("playerConnect", {
+        guildId,
+        channelId,
+        selfDeaf: connectOptions.selfDeaf,
+        selfMute: connectOptions.selfMute,
+      });
       return;
     }
 
@@ -291,7 +328,6 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       this.syncedVoiceStateKeys.delete(guildId);
     }
 
-    const connectOptions = { ...DEFAULT_VOICE_CONNECT_OPTIONS, ...options };
     await this.sendVoiceStateUpdate(guildId, {
       channelId,
       selfDeaf: connectOptions.selfDeaf,
@@ -306,6 +342,13 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     if (player) {
       player.connected = true;
     }
+
+    this.emit("playerConnect", {
+      guildId,
+      channelId,
+      selfDeaf: connectOptions.selfDeaf,
+      selfMute: connectOptions.selfMute,
+    });
   }
 
   async disconnectVoice(guildId: string): Promise<void> {
@@ -325,6 +368,70 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     const player = this.players.get(guildId);
     if (player) {
       player.connected = false;
+    }
+
+    this.emit("playerDisconnect", {
+      guildId,
+      reason: "manual",
+    });
+  }
+
+  emitPlayerEvent(event: PlayerActionEvent): void {
+    switch (event.type) {
+      case "playerPause":
+        this.emit("playerPause", {
+          guildId: event.guildId,
+        });
+        return;
+      case "playerPlay":
+        this.emit("playerPlay", {
+          guildId: event.guildId,
+          track: event.track,
+          source: event.source,
+        });
+        return;
+      case "playerQueueAdd":
+        this.emit("playerQueueAdd", {
+          guildId: event.guildId,
+          track: event.track,
+          queueSize: event.queueSize,
+        });
+        return;
+      case "playerQueueRemove":
+        this.emit("playerQueueRemove", {
+          guildId: event.guildId,
+          track: event.track,
+          index: event.index,
+          queueSize: event.queueSize,
+        });
+        return;
+      case "playerResume":
+        this.emit("playerResume", {
+          guildId: event.guildId,
+        });
+        return;
+      case "playerSkip":
+        this.emit("playerSkip", {
+          guildId: event.guildId,
+          skippedTrack: event.skippedTrack,
+          nextTrack: event.nextTrack,
+        });
+        return;
+      case "playerStop":
+        this.emit("playerStop", {
+          guildId: event.guildId,
+          destroyPlayer: event.destroyPlayer,
+          disconnectVoice: event.disconnectVoice,
+        });
+        return;
+      case "playerVolumeUpdate":
+        this.emit("playerVolumeUpdate", {
+          guildId: event.guildId,
+          volume: event.volume,
+        });
+        return;
+      default:
+        return;
     }
   }
 
@@ -418,6 +525,11 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       if (player) {
         player.connected = false;
       }
+
+      this.emit("playerDisconnect", {
+        guildId: event.guildId,
+        reason: "voiceSocketClosed",
+      });
 
       this.emit("voiceSocketClosed", {
         guildId: event.guildId,
@@ -518,6 +630,11 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       if (player) {
         player.connected = false;
       }
+
+      this.emit("playerDisconnect", {
+        guildId,
+        reason: "voiceStateUpdate",
+      });
 
       this.voiceStates.delete(guildId);
       this.voiceServers.delete(guildId);

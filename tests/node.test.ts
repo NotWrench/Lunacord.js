@@ -126,6 +126,17 @@ describe("Node", () => {
   });
 
   describe("voice packet handling", () => {
+    it("should emit playerCreate when creating a new player", () => {
+      const events: string[] = [];
+
+      node.on("playerCreate", ({ guildId }) => {
+        events.push(guildId);
+      });
+
+      node.createPlayer("guild-create");
+      expect(events).toEqual(["guild-create"]);
+    });
+
     it("should expose a cached voice payload after both VOICE packets are received", () => {
       node.handleVoicePacket({
         t: "VOICE_STATE_UPDATE",
@@ -216,6 +227,11 @@ describe("Node", () => {
         sendGatewayPayload,
       });
       const player = nodeWithVoiceAdapter.createPlayer("guild-789");
+      const events: string[] = [];
+
+      nodeWithVoiceAdapter.on("playerConnect", ({ guildId, channelId }) => {
+        events.push(`${guildId}:${channelId}`);
+      });
 
       await nodeWithVoiceAdapter.connectVoice("guild-789", "channel-789");
 
@@ -229,6 +245,7 @@ describe("Node", () => {
         },
       });
       expect(player.isConnected).toBe(true);
+      expect(events).toEqual(["guild-789:channel-789"]);
     });
 
     it("should no-op connectVoice when already connected to the same channel", async () => {
@@ -329,6 +346,23 @@ describe("Node", () => {
       expect(errors).toHaveLength(0);
     });
 
+    it("should emit playerDisconnect events for manual disconnect", async () => {
+      const sendGatewayPayload = mock(() => Promise.resolve());
+      const nodeWithVoiceAdapter = new Node({
+        ...NODE_OPTIONS,
+        sendGatewayPayload,
+      });
+      const events: string[] = [];
+
+      nodeWithVoiceAdapter.on("playerDisconnect", ({ guildId, reason }) => {
+        events.push(`${guildId}:${reason}`);
+      });
+
+      await nodeWithVoiceAdapter.disconnectVoice("guild-123");
+
+      expect(events).toEqual(["guild-123:manual"]);
+    });
+
     it("should emit nodeReconnecting ws events when socket reconnects", () => {
       const wsEvents: string[] = [];
 
@@ -341,6 +375,58 @@ describe("Node", () => {
       node.socket.emit("reconnecting", { attempt: 2, delay: 2_000 });
 
       expect(wsEvents).toEqual(["2:2000"]);
+    });
+  });
+
+  describe("player action events", () => {
+    it("should surface play/pause/resume/volume/stop/queue/skip events", async () => {
+      node.sessionId = "session-123";
+      node.rest.updatePlayer = mock(() => Promise.resolve());
+
+      const player = node.createPlayer("guild-events");
+      const events: string[] = [];
+
+      node.on("playerPlay", () => events.push("playerPlay"));
+      node.on("playerPause", () => events.push("playerPause"));
+      node.on("playerResume", () => events.push("playerResume"));
+      node.on("playerVolumeUpdate", () => events.push("playerVolumeUpdate"));
+      node.on("playerStop", () => events.push("playerStop"));
+      node.on("playerQueueAdd", () => events.push("playerQueueAdd"));
+      node.on("playerQueueRemove", () => events.push("playerQueueRemove"));
+      node.on("playerSkip", () => events.push("playerSkip"));
+
+      const track = new Track(MOCK_RAW_TRACK);
+      const nextTrack = new Track({
+        ...MOCK_RAW_TRACK,
+        encoded: "QAABJAMACk5ldmVyIEdvbm5hX25leHQ...",
+      });
+
+      player.add(track);
+      player.remove(0);
+
+      await player.play(track);
+      await player.pause(true);
+      await player.pause(false);
+      await player.setVolume(250);
+      await player.stop(false, false);
+
+      player.current = track;
+      player.add(nextTrack);
+      await player.skip();
+
+      expect(events).toEqual([
+        "playerQueueAdd",
+        "playerQueueRemove",
+        "playerPlay",
+        "playerPause",
+        "playerResume",
+        "playerVolumeUpdate",
+        "playerStop",
+        "playerQueueAdd",
+        "playerStop",
+        "playerPlay",
+        "playerSkip",
+      ]);
     });
   });
 });

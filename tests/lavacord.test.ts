@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
 import { Lavacord } from "../core/Lavacord.ts";
 import { Node } from "../core/Node.ts";
+import { Track } from "../structures/Track.ts";
+import type { RawTrack } from "../types.ts";
 
 const BASE_OPTIONS = {
   nodes: [
@@ -26,6 +28,23 @@ const createReadyPayload = (sessionId: string) => ({
   resumed: false,
   sessionId,
 });
+
+const MOCK_RAW_TRACK: RawTrack = {
+  encoded: "QAABJAMACk5ldmVyIEdvbm5h...",
+  info: {
+    identifier: "dQw4w9WgXcQ",
+    isSeekable: true,
+    author: "Rick Astley",
+    length: 212_000,
+    isStream: false,
+    position: 0,
+    title: "Never Gonna Give You Up",
+    uri: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    artworkUrl: null,
+    isrc: null,
+    sourceName: "youtube",
+  },
+};
 
 describe("Lavacord", () => {
   beforeEach(() => {
@@ -217,6 +236,105 @@ describe("Lavacord", () => {
     node.emit("playerDestroy", { guildId: "guild-123" });
 
     expect(events).toEqual(["node-a:guild-123"]);
+  });
+
+  it("should re-emit all player action events with node context", () => {
+    const lavacord = new Lavacord(BASE_OPTIONS);
+    const node = lavacord.getNode("node-a")!;
+    const track = new Track(MOCK_RAW_TRACK);
+    const events: string[] = [];
+
+    lavacord.on("playerCreate", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:create:${guildId}`);
+    });
+    lavacord.on("playerConnect", ({ guildId, channelId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:connect:${guildId}:${channelId}`);
+    });
+    lavacord.on("playerDisconnect", ({ guildId, reason, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:disconnect:${guildId}:${reason}`);
+    });
+    lavacord.on("playerPause", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:pause:${guildId}`);
+    });
+    lavacord.on("playerResume", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:resume:${guildId}`);
+    });
+    lavacord.on("playerPlay", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:play:${guildId}`);
+    });
+    lavacord.on("playerQueueAdd", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:queueAdd:${guildId}`);
+    });
+    lavacord.on("playerQueueRemove", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:queueRemove:${guildId}`);
+    });
+    lavacord.on("playerSkip", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:skip:${guildId}`);
+    });
+    lavacord.on("playerStop", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:stop:${guildId}`);
+    });
+    lavacord.on("playerVolumeUpdate", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:volume:${guildId}`);
+    });
+
+    node.createPlayer("guild-123");
+    node.emit("playerConnect", {
+      guildId: "guild-123",
+      channelId: "channel-123",
+      selfDeaf: true,
+      selfMute: false,
+    });
+    node.emit("playerDisconnect", {
+      guildId: "guild-123",
+      reason: "manual",
+    });
+    node.emit("playerPause", { guildId: "guild-123" });
+    node.emit("playerResume", { guildId: "guild-123" });
+    node.emit("playerPlay", {
+      guildId: "guild-123",
+      track,
+      source: "direct",
+    });
+    node.emit("playerQueueAdd", {
+      guildId: "guild-123",
+      track,
+      queueSize: 1,
+    });
+    node.emit("playerQueueRemove", {
+      guildId: "guild-123",
+      track,
+      index: 0,
+      queueSize: 0,
+    });
+    node.emit("playerSkip", {
+      guildId: "guild-123",
+      skippedTrack: track,
+      nextTrack: null,
+    });
+    node.emit("playerStop", {
+      guildId: "guild-123",
+      destroyPlayer: false,
+      disconnectVoice: false,
+    });
+    node.emit("playerVolumeUpdate", {
+      guildId: "guild-123",
+      volume: 250,
+    });
+
+    expect(events).toEqual([
+      "node-a:create:guild-123",
+      "node-a:connect:guild-123:channel-123",
+      "node-a:disconnect:guild-123:manual",
+      "node-a:pause:guild-123",
+      "node-a:resume:guild-123",
+      "node-a:play:guild-123",
+      "node-a:queueAdd:guild-123",
+      "node-a:queueRemove:guild-123",
+      "node-a:skip:guild-123",
+      "node-a:stop:guild-123",
+      "node-a:volume:guild-123",
+    ]);
   });
 
   it("should re-emit ws with node context", () => {
