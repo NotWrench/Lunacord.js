@@ -83,10 +83,17 @@ export interface NodeOptions {
   clientName?: string;
   host: string;
   id?: string;
+  initialReconnectDelayMs?: number;
+  maxReconnectAttempts?: number;
+  maxReconnectDelayMs?: number;
   numShards: number;
   password: string;
   port: number;
+  requestRetryAttempts?: number;
+  requestRetryDelayMs?: number;
+  requestTimeoutMs?: number;
   resume?: boolean;
+  secure?: boolean;
   sendGatewayPayload?: (guildId: string, payload: GatewayVoiceStatePayload) => void | Promise<void>;
   timeout?: number;
   userId: string;
@@ -139,6 +146,7 @@ interface VoiceWaiter {
 export class Node extends TypedEventEmitter<NodeEvents> {
   readonly id: string;
   sessionId: string | null = null;
+  latestStats: Stats | null = null;
   readonly rest: Rest;
   readonly socket: Socket;
 
@@ -158,19 +166,27 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     this.options = options;
     this.id = options.id ?? `${options.host}:${options.port}`;
     const clientName = options.clientName ?? DEFAULT_CLIENT_NAME;
+    const protocol = options.secure ? "https" : "http";
 
     this.rest = new Rest({
-      baseUrl: `http://${options.host}:${options.port}`,
+      baseUrl: `${protocol}://${options.host}:${options.port}`,
       password: options.password,
+      requestTimeoutMs: options.requestTimeoutMs,
+      retryAttempts: options.requestRetryAttempts,
+      retryDelayMs: options.requestRetryDelayMs,
     });
 
     this.socket = new Socket({
       host: options.host,
       port: options.port,
+      secure: options.secure,
       password: options.password,
       userId: options.userId,
       numShards: options.numShards,
       clientName,
+      initialReconnectDelayMs: options.initialReconnectDelayMs,
+      maxReconnectAttempts: options.maxReconnectAttempts,
+      maxReconnectDelayMs: options.maxReconnectDelayMs,
     });
 
     this.setupSocketListeners();
@@ -496,6 +512,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     });
 
     this.socket.on("stats", (stats) => {
+      this.latestStats = stats;
       this.emit("stats", stats);
     });
 
@@ -576,14 +593,14 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
     switch (event.type) {
       case "TrackStartEvent": {
-        const track = new Track(event.track);
+        const track = Track.fromValidated(event.track);
         player.current = track;
         this.emit("trackStart", { player, track });
         break;
       }
 
       case "TrackEndEvent": {
-        const track = new Track(event.track);
+        const track = Track.fromValidated(event.track);
         player.current = null;
         this.emit("trackEnd", { player, track, reason: event.reason });
         void this.handleQueueAdvance(player, event.reason, track);
@@ -591,7 +608,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       }
 
       case "TrackExceptionEvent": {
-        const track = new Track(event.track);
+        const track = Track.fromValidated(event.track);
         this.emit("trackException", {
           player,
           track,
@@ -601,7 +618,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       }
 
       case "TrackStuckEvent": {
-        const track = new Track(event.track);
+        const track = Track.fromValidated(event.track);
         this.emit("trackStuck", {
           player,
           track,
@@ -624,7 +641,6 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     return {
-      channelId: state.channelId,
       endpoint: server.endpoint,
       sessionId: state.sessionId,
       token: server.token,
@@ -745,7 +761,12 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       return;
     }
 
-    const voiceKey = `${sessionId}:${voicePayload.sessionId}:${voicePayload.channelId}:${voicePayload.endpoint}:${voicePayload.token}`;
+    const voiceState = this.voiceStates.get(guildId);
+    if (!voiceState) {
+      return;
+    }
+
+    const voiceKey = `${sessionId}:${voicePayload.sessionId}:${voiceState.channelId}:${voicePayload.endpoint}:${voicePayload.token}`;
     if (this.syncedVoiceStateKeys.get(guildId) === voiceKey) {
       return;
     }

@@ -25,7 +25,9 @@ export class Queue {
   }
 
   enqueueMany(tracks: Track[]): number {
-    this.tracks.push(...tracks);
+    for (const track of tracks) {
+      this.tracks.push(track);
+    }
     return this.tracks.length;
   }
 

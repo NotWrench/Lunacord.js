@@ -37,25 +37,34 @@ export class ValidationError extends Error {
 interface RestOptions {
   baseUrl: string;
   password: string;
+  requestTimeoutMs?: number;
+  retryAttempts?: number;
+  retryDelayMs?: number;
 }
 
 const TRAILING_SLASH = /\/$/;
 const DEFAULT_ERROR_MESSAGE = "Request failed";
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const DEFAULT_RETRY_ATTEMPTS = 1;
+const DEFAULT_RETRY_DELAY_MS = 250;
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 502, 503, 504]);
 
 export class Rest {
   private readonly baseUrl: string;
-  private readonly password: string;
+  private readonly headers: Record<string, string>;
+  private readonly requestTimeoutMs: number;
+  private readonly retryAttempts: number;
+  private readonly retryDelayMs: number;
 
   constructor(options: RestOptions) {
     this.baseUrl = options.baseUrl.replace(TRAILING_SLASH, "");
-    this.password = options.password;
-  }
-
-  private get headers(): Record<string, string> {
-    return {
-      Authorization: this.password,
+    this.headers = {
+      Authorization: options.password,
       "Content-Type": "application/json",
     };
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.retryAttempts = options.retryAttempts ?? DEFAULT_RETRY_ATTEMPTS;
+    this.retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   }
 
   private async parseErrorMessage(response: Response): Promise<string> {
@@ -90,34 +99,91 @@ export class Rest {
     body?: unknown
   ): Promise<T | void> {
     const url = `${this.baseUrl}${path}`;
-    const init: RequestInit = {
-      method,
-      headers: this.headers,
-    };
+    let attempt = 0;
 
-    if (body !== undefined) {
-      init.body = JSON.stringify(body);
+    while (true) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        controller.abort();
+      }, this.requestTimeoutMs);
+      const init: RequestInit = {
+        method,
+        headers: this.headers,
+        signal: controller.signal,
+      };
+
+      if (body !== undefined) {
+        init.body = JSON.stringify(body);
+      }
+
+      try {
+        const response = await fetch(url, init);
+
+        if (!response.ok) {
+          if (this.shouldRetryResponse(response.status, attempt)) {
+            attempt++;
+            await this.delay(this.retryDelayMs * 2 ** (attempt - 1));
+            continue;
+          }
+
+          const message = await this.parseErrorMessage(response);
+          throw new LavalinkRestError(message, response.status, path);
+        }
+
+        if (!schema) {
+          return;
+        }
+
+        const data: unknown = await response.json();
+        const result = schema.safeParse(data);
+
+        if (!result.success) {
+          throw new ValidationError(result.error.issues);
+        }
+
+        return result.data;
+      } catch (error) {
+        if (this.shouldRetryError(error, attempt)) {
+          attempt++;
+          await this.delay(this.retryDelayMs * 2 ** (attempt - 1));
+          continue;
+        }
+
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new Error(`Request timed out after ${this.requestTimeoutMs}ms`);
+        }
+
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  private shouldRetryError(error: unknown, attempt: number): boolean {
+    if (attempt >= this.retryAttempts) {
+      return false;
     }
 
-    const response = await fetch(url, init);
-
-    if (!response.ok) {
-      const message = await this.parseErrorMessage(response);
-      throw new LavalinkRestError(message, response.status, path);
+    if (error instanceof ValidationError || error instanceof LavalinkRestError) {
+      return false;
     }
 
-    if (!schema) {
-      return;
+    if (error instanceof DOMException && error.name === "AbortError") {
+      return true;
     }
 
-    const data: unknown = await response.json();
-    const result = schema.safeParse(data);
+    return error instanceof Error;
+  }
 
-    if (!result.success) {
-      throw new ValidationError(result.error.issues);
-    }
-
-    return result.data;
+  private shouldRetryResponse(status: number, attempt: number): boolean {
+    return attempt < this.retryAttempts && RETRYABLE_STATUS_CODES.has(status);
   }
 
   loadTracks(identifier: string): Promise<LoadResult> {
@@ -134,10 +200,15 @@ export class Rest {
     return this.request("GET", `/v4/decodetrack?encodedTrack=${encoded}`, TrackSchema);
   }
 
-  updatePlayer(sessionId: string, guildId: string, payload: PlayerUpdatePayload): Promise<void> {
+  updatePlayer(
+    sessionId: string,
+    guildId: string,
+    payload: PlayerUpdatePayload,
+    options?: { noReplace?: boolean }
+  ): Promise<void> {
     return this.request(
       "PATCH",
-      `/v4/sessions/${sessionId}/players/${guildId}?noReplace=false`,
+      `/v4/sessions/${sessionId}/players/${guildId}?noReplace=${options?.noReplace ?? false}`,
       undefined,
       payload
     );

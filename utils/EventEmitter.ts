@@ -23,14 +23,19 @@ export class TypedEventEmitter<TEvents extends { [K in keyof TEvents]: TEvents[K
     return this;
   }
 
-  emit<K extends keyof TEvents>(event: K, data: TEvents[K]): void {
+  emit<K extends keyof TEvents>(event: K, data: TEvents[K]): boolean {
     const set = this.listeners.get(event);
     if (!set) {
-      return;
+      return false;
     }
     for (const listener of [...set]) {
       (listener as Listener<TEvents[K]>)(data);
     }
+    return set.size > 0;
+  }
+
+  listenerCount<K extends keyof TEvents>(event: K): number {
+    return this.listeners.get(event)?.size ?? 0;
   }
 
   once<K extends keyof TEvents>(event: K, listener: Listener<TEvents[K]>): this {

@@ -335,7 +335,6 @@ export const PlayerUpdatePayloadSchema = z.object({
       endpoint: z.string(),
       sessionId: z.string(),
       token: z.string(),
-      channelId: z.string(),
     })
     .optional(),
 });

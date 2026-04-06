@@ -8,17 +8,37 @@ import {
 } from "./Node.ts";
 import type { Player } from "./Player.ts";
 
-export interface LavacordNodeOptions {
-  host: string;
-  id?: string;
-  password: string;
-  port: number;
+export class LunacordError extends Error {
+  override readonly cause?: unknown;
+  readonly node: Node;
+
+  constructor(error: Error, node: Node) {
+    super(error.message);
+    this.name = error.name;
+    this.node = node;
+    this.cause = "cause" in error ? error.cause : undefined;
+    this.stack = error.stack;
+  }
 }
 
-export interface LavacordOptions {
+export interface LunacordNodeOptions {
+  host: string;
+  id?: string;
+  initialReconnectDelayMs?: number;
+  maxReconnectAttempts?: number;
+  maxReconnectDelayMs?: number;
+  password: string;
+  port: number;
+  requestRetryAttempts?: number;
+  requestRetryDelayMs?: number;
+  requestTimeoutMs?: number;
+  secure?: boolean;
+}
+
+export interface LunacordOptions {
   autoConnect?: boolean;
   clientName?: string;
-  nodes: readonly LavacordNodeOptions[];
+  nodes: readonly LunacordNodeOptions[];
   numShards: number;
   resume?: boolean;
   sendGatewayPayload?: (guildId: string, payload: GatewayVoiceStatePayload) => void | Promise<void>;
@@ -29,7 +49,7 @@ export interface LavacordOptions {
 type NodeBound<T> = T & { node: Node };
 type NodeBoundEvents = { [K in keyof NodeEvents]: NodeBound<NodeEvents[K]> };
 
-export interface LavacordEvents extends NodeBoundEvents {
+export interface LunacordEvents extends NodeBoundEvents {
   nodeConnect: NodeBound<NodeEvents["ready"]>;
   nodeCreate: { node: Node };
   nodeDisconnect: NodeBound<Extract<NodeEvents["ws"], { type: "nodeDisconnect" }>>;
@@ -63,13 +83,13 @@ export interface LavacordEvents extends NodeBoundEvents {
   ws: NodeBound<NodeEvents["ws"]>;
 }
 
-export class Lavacord extends TypedEventEmitter<LavacordEvents> {
+export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   private readonly nodes = new Map<string, Node>();
-  private readonly options: LavacordOptions;
+  private readonly options: LunacordOptions;
   private readonly playerNodes = new Map<string, string>();
   private connectPromise: Promise<void> | null = null;
 
-  constructor(options: LavacordOptions) {
+  constructor(options: LunacordOptions) {
     super();
     this.options = options;
 
@@ -108,7 +128,7 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
 
     const sendGatewayPayload = this.options.sendGatewayPayload;
     if (!sendGatewayPayload) {
-      throw new Error("Lavacord was not configured with sendGatewayPayload");
+      throw new Error("Lunacord was not configured with sendGatewayPayload");
     }
 
     await sendGatewayPayload(guildId, {
@@ -142,7 +162,7 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
     this.playerNodes.delete(guildId);
   }
 
-  async disconnect(): Promise<void> {
+  disconnect(): void {
     for (const node of this.nodes.values()) {
       node.disconnect();
     }
@@ -271,8 +291,9 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
       this.emit("nodeConnect", { ...payload, node });
     });
     node.on("error", (error) => {
-      this.emit("error", Object.assign(error, { node }));
-      this.emit("nodeError", Object.assign(error, { node }));
+      const enriched = new LunacordError(error, node);
+      this.emit("error", enriched);
+      this.emit("nodeError", enriched);
     });
     node.on("playerUpdate", (payload) => {
       this.emit("playerUpdate", { ...payload, node });
@@ -328,15 +349,22 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
     ).then(() => undefined);
   }
 
-  private createNodeOptions(id: string, nodeOptions: LavacordNodeOptions): NodeOptions {
+  private createNodeOptions(id: string, nodeOptions: LunacordNodeOptions): NodeOptions {
     return {
       clientName: this.options.clientName,
       host: nodeOptions.host,
       id,
+      initialReconnectDelayMs: nodeOptions.initialReconnectDelayMs,
+      maxReconnectAttempts: nodeOptions.maxReconnectAttempts,
+      maxReconnectDelayMs: nodeOptions.maxReconnectDelayMs,
       numShards: this.options.numShards,
       password: nodeOptions.password,
       port: nodeOptions.port,
+      requestRetryAttempts: nodeOptions.requestRetryAttempts,
+      requestRetryDelayMs: nodeOptions.requestRetryDelayMs,
+      requestTimeoutMs: nodeOptions.requestTimeoutMs,
       resume: this.options.resume,
+      secure: nodeOptions.secure,
       sendGatewayPayload: this.options.sendGatewayPayload,
       timeout: this.options.timeout,
       userId: this.options.userId,

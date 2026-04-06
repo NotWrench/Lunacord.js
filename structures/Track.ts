@@ -19,8 +19,9 @@ export class Track {
 
   private readonly raw: RawTrack;
 
-  constructor(data: RawTrack) {
-    const parsed = TrackSchema.parse(data);
+  constructor(data: RawTrack, skipValidation = false) {
+    const parsed = skipValidation ? data : TrackSchema.parse(data);
+
     this.raw = parsed;
     this.encoded = parsed.encoded;
     this.title = parsed.info.title;
@@ -36,6 +37,10 @@ export class Track {
 
   static from(data: RawTrack): Track {
     return new Track(data);
+  }
+
+  static fromValidated(data: RawTrack): Track {
+    return new Track(data, true);
   }
 
   get durationFormatted(): string {

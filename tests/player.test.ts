@@ -153,7 +153,6 @@ describe("Player", () => {
 
     it("should include cached voice payload without waiting", async () => {
       mockNode.getVoicePayload = mock(() => ({
-        channelId: "channel-123",
         endpoint: "us-east.discord.gg",
         sessionId: "voice-session-123",
         token: "voice-token",
@@ -164,12 +163,24 @@ describe("Player", () => {
       expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
         track: { encoded: track.encoded },
         voice: {
-          channelId: "channel-123",
           endpoint: "us-east.discord.gg",
           sessionId: "voice-session-123",
           token: "voice-token",
         },
       });
+    });
+
+    it("should pass noReplace when requested", async () => {
+      await player.play(track, { noReplace: true });
+
+      expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith(
+        "test-session",
+        "guild-123",
+        {
+          track: { encoded: track.encoded },
+        },
+        { noReplace: true }
+      );
     });
 
     it("should dequeue first track and play when no arg given", async () => {
@@ -496,6 +507,28 @@ describe("Player", () => {
       });
     });
 
+    it("should merge equalizer filters by band", async () => {
+      await player.setFilters({
+        equalizer: [
+          { band: 0, gain: 0.1 },
+          { band: 2, gain: 0.2 },
+        ],
+      });
+
+      await player.updateFilters({
+        equalizer: [
+          { band: 1, gain: 0.15 },
+          { band: 2, gain: 0.25 },
+        ],
+      });
+
+      expect(player.filters.equalizer).toEqual([
+        { band: 0, gain: 0.1 },
+        { band: 1, gain: 0.15 },
+        { band: 2, gain: 0.25 },
+      ]);
+    });
+
     it("should clear filters", async () => {
       await player.setFilters({
         karaoke: {
@@ -625,6 +658,8 @@ describe("Player", () => {
     });
 
     it("should enqueue when already playing", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
       player.current = track;
 
       const result = await player.searchAndPlay("test");
@@ -633,9 +668,16 @@ describe("Player", () => {
       expect(player.current?.title).toBe("Never Gonna Give You Up");
       expect(player.queue.size).toBe(1);
       expect(player.queue.peek()?.title).toBe("Test Song");
+      expect(
+        getMockEvents(emitPlayerEvent)
+          .filter(isEventWithType)
+          .map((event) => event.type)
+      ).toContain("playerQueueAdd");
     });
 
     it("should enqueue all playlist tracks", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
       mockNode.rest.search = mock(
         (): Promise<LoadResult> =>
           Promise.resolve({
@@ -656,6 +698,11 @@ describe("Player", () => {
       expect(player.current?.title).toBe("Never Gonna Give You Up");
       expect(player.queue.size).toBe(1);
       expect(player.queue.peek()?.title).toBe("Test Song");
+      expect(
+        getMockEvents(emitPlayerEvent)
+          .filter(isEventWithType)
+          .map((event) => event.type)
+      ).toEqual(["playerQueueAdd", "playerQueueAdd", "playerPlay"]);
     });
 
     it("should not mutate playback state for empty results", async () => {

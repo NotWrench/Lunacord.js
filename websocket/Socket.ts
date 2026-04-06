@@ -21,9 +21,13 @@ interface SocketEvents {
 interface SocketOptions {
   clientName: string;
   host: string;
+  initialReconnectDelayMs?: number;
+  maxReconnectAttempts?: number;
+  maxReconnectDelayMs?: number;
   numShards: number;
   password: string;
   port: number;
+  secure?: boolean;
   userId: string;
 }
 
@@ -81,8 +85,9 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
   }
 
   private openConnection(): void {
-    const { host, port, password, userId, numShards, clientName } = this.options;
-    const url = `ws://${host}:${port}/v4/websocket`;
+    const { host, port, password, userId, numShards, clientName, secure } = this.options;
+    const protocol = secure ? "wss" : "ws";
+    const url = `${protocol}://${host}:${port}/v4/websocket`;
 
     const headers: Bun.WebSocketOptions["headers"] = {
       Authorization: password,
@@ -124,6 +129,20 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
     try {
       if (typeof raw === "string") {
         parsed = JSON.parse(raw);
+      } else if (raw instanceof ArrayBuffer) {
+        parsed = JSON.parse(new TextDecoder().decode(new Uint8Array(raw)));
+      } else if (ArrayBuffer.isView(raw)) {
+        parsed = JSON.parse(new TextDecoder().decode(new Uint8Array(raw.buffer)));
+      } else if (raw instanceof Blob) {
+        void raw.text().then(
+          (text) => {
+            this.handleMessage(text);
+          },
+          () => {
+            this.emit("error", new Error("Failed to read WebSocket binary message"));
+          }
+        );
+        return;
       } else {
         this.emit("error", new Error("Unsupported WebSocket message type"));
         return;
@@ -163,15 +182,19 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
   }
 
   private attemptReconnect(): void {
-    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      this.emit("error", new Error(`Failed to reconnect after ${MAX_RECONNECT_ATTEMPTS} attempts`));
+    const maxReconnectAttempts = this.options.maxReconnectAttempts ?? MAX_RECONNECT_ATTEMPTS;
+    const initialReconnectDelay = this.options.initialReconnectDelayMs ?? INITIAL_RECONNECT_DELAY;
+    const maxReconnectDelay = this.options.maxReconnectDelayMs ?? MAX_RECONNECT_DELAY;
+
+    if (this.reconnectAttempts >= maxReconnectAttempts) {
+      this.emit("error", new Error(`Failed to reconnect after ${maxReconnectAttempts} attempts`));
       return;
     }
 
     this.reconnectAttempts++;
     const delay = Math.min(
-      INITIAL_RECONNECT_DELAY * 2 ** (this.reconnectAttempts - 1),
-      MAX_RECONNECT_DELAY
+      initialReconnectDelay * 2 ** (this.reconnectAttempts - 1),
+      maxReconnectDelay
     );
 
     this.emit("reconnecting", {

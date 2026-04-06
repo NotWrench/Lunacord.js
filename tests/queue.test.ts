@@ -87,4 +87,22 @@ describe("Queue", () => {
     expect(snapshot).toHaveLength(0);
     expect(queue.size).toBe(1);
   });
+
+  it("should enqueue large arrays safely", () => {
+    const queue = new Queue();
+    const tracks = Array.from({ length: 20_000 }, (_, index) =>
+      Track.from({
+        ...MOCK_RAW_TRACK,
+        encoded: `track-${index}`,
+        info: {
+          ...MOCK_RAW_TRACK.info,
+          identifier: `id-${index}`,
+          title: `Track ${index}`,
+        },
+      })
+    );
+
+    expect(() => queue.enqueueMany(tracks)).not.toThrow();
+    expect(queue.size).toBe(20_000);
+  });
 });

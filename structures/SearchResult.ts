@@ -40,20 +40,20 @@ export const toSearchResult = (result: LoadResult): SearchResult => {
     case "track":
       return {
         loadType: "track",
-        tracks: [Track.from(result.data)],
+        tracks: [Track.fromValidated(result.data)],
       };
 
     case "search":
       return {
         loadType: "search",
-        tracks: result.data.map((track) => Track.from(track)),
+        tracks: result.data.map((track) => Track.fromValidated(track)),
       };
 
     case "playlist":
       return {
         loadType: "playlist",
         playlistInfo: result.data.info,
-        tracks: result.data.tracks.map((track) => Track.from(track)),
+        tracks: result.data.tracks.map((track) => Track.fromValidated(track)),
       };
 
     case "empty":

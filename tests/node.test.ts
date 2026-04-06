@@ -77,6 +77,62 @@ describe("Node", () => {
 
       await expect(connectPromise).rejects.toThrow("Timed out connecting to Lavalink");
     });
+
+    it("should use secure protocols when configured", async () => {
+      const originalWebSocket = globalThis.WebSocket;
+      const webSocketUrls: string[] = [];
+      const fetchUrls: string[] = [];
+
+      class MockWebSocket {
+        static readonly OPEN = 1;
+        readonly readyState = MockWebSocket.OPEN;
+        onclose: ((event: CloseEvent) => void) | null = null;
+        onerror: ((event: Event) => void) | null = null;
+        onmessage: ((event: MessageEvent) => void) | null = null;
+        onopen: (() => void) | null = null;
+
+        constructor(url: string | URL) {
+          webSocketUrls.push(String(url));
+          queueMicrotask(() => {
+            this.onopen?.();
+            this.onmessage?.({
+              data: JSON.stringify(createReadyPayload()),
+            } as MessageEvent);
+          });
+        }
+
+        close(): void {}
+        send(): void {}
+      }
+
+      globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = mock((url: string | URL) => {
+        fetchUrls.push(String(url));
+        return Promise.resolve(
+          new Response(JSON.stringify({ loadType: "empty", data: {} }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      const secureNode = new Node({
+        ...NODE_OPTIONS,
+        secure: true,
+      });
+
+      await secureNode.connect();
+      await secureNode.rest.loadTracks("ytsearch:test");
+
+      expect(webSocketUrls).toEqual(["wss://localhost:2333/v4/websocket"]);
+      expect(fetchUrls).toEqual([
+        "https://localhost:2333/v4/loadtracks?identifier=ytsearch%3Atest",
+      ]);
+
+      globalThis.fetch = originalFetch;
+      globalThis.WebSocket = originalWebSocket;
+    });
   });
 
   describe("track end handling", () => {
@@ -214,7 +270,6 @@ describe("Node", () => {
       });
 
       expect(node.getVoicePayload("guild-123")).toEqual({
-        channelId: "channel-123",
         endpoint: "us-east.discord.gg",
         sessionId: "voice-session-123",
         token: "voice-token",
@@ -248,7 +303,6 @@ describe("Node", () => {
 
       expect(node.rest.updatePlayer).toHaveBeenCalledWith("session-123", "guild-456", {
         voice: {
-          channelId: "channel-456",
           endpoint: "us-west.discord.gg",
           sessionId: "voice-session-456",
           token: "voice-token-456",
@@ -483,6 +537,32 @@ describe("Node", () => {
         "playerPlay",
         "playerSkip",
       ]);
+    });
+  });
+
+  describe("stats", () => {
+    it("should cache the latest stats payload", () => {
+      expect(node.latestStats).toBeNull();
+
+      node.socket.emit("stats", {
+        op: "stats",
+        players: 1,
+        playingPlayers: 1,
+        uptime: 10,
+        memory: {
+          free: 1,
+          used: 2,
+          allocated: 3,
+          reservable: 4,
+        },
+        cpu: {
+          cores: 4,
+          systemLoad: 0.1,
+          lavalinkLoad: 0.2,
+        },
+      });
+
+      expect(node.latestStats?.players).toBe(1);
     });
   });
 });

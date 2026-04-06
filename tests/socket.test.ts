@@ -114,4 +114,45 @@ describe("Socket", () => {
     expect(statsEvents).toEqual([2]);
     expect(trackEvents).toEqual(["TrackStartEvent"]);
   });
+
+  it("should decode binary websocket messages", () => {
+    const socket = new Socket(SOCKET_OPTIONS);
+    const readyEvents: string[] = [];
+    const handleMessage = Reflect.get(socket, "handleMessage") as (
+      this: Socket,
+      raw: ArrayBuffer
+    ) => void;
+
+    socket.on("ready", (payload) => {
+      readyEvents.push(payload.sessionId);
+    });
+
+    handleMessage.call(
+      socket,
+      new TextEncoder().encode(JSON.stringify({ op: "ready", resumed: false, sessionId: "binary" }))
+        .buffer
+    );
+
+    expect(readyEvents).toEqual(["binary"]);
+  });
+
+  it("should honor reconnect configuration", () => {
+    const socket = new Socket({
+      ...SOCKET_OPTIONS,
+      initialReconnectDelayMs: 5,
+      maxReconnectAttempts: 2,
+      maxReconnectDelayMs: 10,
+    });
+    const reconnectEvents: string[] = [];
+    const attemptReconnect = Reflect.get(socket, "attemptReconnect") as (this: Socket) => void;
+
+    socket.on("reconnecting", ({ attempt, delay }) => {
+      reconnectEvents.push(`${attempt}:${delay}`);
+    });
+
+    attemptReconnect.call(socket);
+    attemptReconnect.call(socket);
+
+    expect(reconnectEvents).toEqual(["1:5", "2:10"]);
+  });
 });

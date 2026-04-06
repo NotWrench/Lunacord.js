@@ -211,7 +211,7 @@ export class Player {
     this.connected = true;
   }
 
-  async play(track?: Track): Promise<void> {
+  async play(track?: Track, options?: { noReplace?: boolean }): Promise<void> {
     const target = track ?? this.queue.dequeue();
     const source: "direct" | "queue" = track ? "direct" : "queue";
 
@@ -231,7 +231,11 @@ export class Player {
       payload.voice = voicePayload;
     }
 
-    await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, payload);
+    if (options) {
+      await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, payload, options);
+    } else {
+      await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, payload);
+    }
     this.emitActionEvent({
       type: "playerPlay",
       guildId: this.guildId,
@@ -392,13 +396,12 @@ export class Player {
       return result;
     }
 
-    if (this.current) {
-      this.queue.enqueueMany(result.loadType === "playlist" ? result.tracks : [result.tracks[0]!]);
-      return result;
-    }
+    const tracksToQueue = result.loadType === "playlist" ? result.tracks : [result.tracks[0]!];
+    this.enqueueTracks(tracksToQueue);
 
-    this.queue.enqueueMany(result.loadType === "playlist" ? result.tracks : [result.tracks[0]!]);
-    await this.play();
+    if (!this.current) {
+      await this.play();
+    }
     return result;
   }
 
@@ -426,6 +429,12 @@ export class Player {
 
     return removed;
   }
+
+  private enqueueTracks(tracks: Track[]): void {
+    for (const track of tracks) {
+      this.add(track);
+    }
+  }
 }
 
 const cloneFilters = (filters: Filters): Filters => JSON.parse(JSON.stringify(filters)) as Filters;
@@ -435,6 +444,7 @@ const mergeFilters = (current: Filters, next: Partial<Filters>): Filters => ({
   ...next,
   channelMix: mergeObject(current.channelMix, next.channelMix),
   distortion: mergeObject(current.distortion, next.distortion),
+  equalizer: mergeEqualizer(current.equalizer, next.equalizer),
   karaoke: mergeObject(current.karaoke, next.karaoke),
   lowPass: mergeObject(current.lowPass, next.lowPass),
   pluginFilters: mergeObject(current.pluginFilters, next.pluginFilters),
@@ -453,4 +463,35 @@ const mergeObject = <T extends object>(current?: T, next?: Partial<T>): T | unde
     ...current,
     ...next,
   } as T;
+};
+
+type EqualizerBand = NonNullable<Filters["equalizer"]>[number];
+
+const mergeEqualizer = (
+  current?: Filters["equalizer"],
+  next?: Filters["equalizer"]
+): Filters["equalizer"] => {
+  if (!current && !next) {
+    return undefined;
+  }
+
+  if (!current) {
+    return next;
+  }
+
+  if (!next) {
+    return current;
+  }
+
+  const merged = new Map<number, EqualizerBand>();
+
+  for (const band of current) {
+    merged.set(band.band, band);
+  }
+
+  for (const band of next) {
+    merged.set(band.band, band);
+  }
+
+  return [...merged.values()].sort((left, right) => left.band - right.band);
 };

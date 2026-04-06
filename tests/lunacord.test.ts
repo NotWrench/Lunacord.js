@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
-import { Lavacord } from "../core/Lavacord.ts";
+import { Lunacord } from "../core/Lunacord.ts";
 import { Node } from "../core/Node.ts";
 import { Track } from "../structures/Track.ts";
 import type { RawTrack } from "../types.ts";
@@ -46,7 +46,7 @@ const MOCK_RAW_TRACK: RawTrack = {
   },
 };
 
-describe("Lavacord", () => {
+describe("Lunacord", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -56,18 +56,18 @@ describe("Lavacord", () => {
   });
 
   it("should create nodes from config", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
+    const lunacord = new Lunacord(BASE_OPTIONS);
 
-    expect(lavacord.getNodes()).toHaveLength(2);
-    expect(lavacord.getNode("node-a")?.id).toBe("node-a");
-    expect(lavacord.getNode("node-b")?.id).toBe("node-b");
+    expect(lunacord.getNodes()).toHaveLength(2);
+    expect(lunacord.getNode("node-a")?.id).toBe("node-a");
+    expect(lunacord.getNode("node-b")?.id).toBe("node-b");
   });
 
   it("should emit nodeCreate for managed nodes", async () => {
     const createdNodeIds: string[] = [];
-    const lavacord = new Lavacord(BASE_OPTIONS);
+    const lunacord = new Lunacord(BASE_OPTIONS);
 
-    lavacord.on("nodeCreate", ({ node }) => {
+    lunacord.on("nodeCreate", ({ node }) => {
       createdNodeIds.push(node.id);
     });
 
@@ -77,15 +77,15 @@ describe("Lavacord", () => {
   });
 
   it("should connect all nodes explicitly", async () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
+    const lunacord = new Lunacord(BASE_OPTIONS);
 
-    for (const node of lavacord.getNodes()) {
+    for (const node of lunacord.getNodes()) {
       node.connect = mock(() => Promise.resolve());
     }
 
-    await expect(lavacord.connect()).resolves.toBeUndefined();
+    await expect(lunacord.connect()).resolves.toBeUndefined();
 
-    for (const node of lavacord.getNodes()) {
+    for (const node of lunacord.getNodes()) {
       expect(node.connect).toHaveBeenCalledTimes(1);
     }
   });
@@ -96,15 +96,15 @@ describe("Lavacord", () => {
       return Promise.resolve();
     });
 
-    const lavacord = new Lavacord({
+    const lunacord = new Lunacord({
       ...BASE_OPTIONS,
       autoConnect: true,
     });
 
-    const startupPromise = lavacord.connect();
+    const startupPromise = lunacord.connect();
 
     await expect(startupPromise).resolves.toBeUndefined();
-    expect(lavacord.connect()).toBe(startupPromise);
+    expect(lunacord.connect()).toBe(startupPromise);
     expect(connectSpy).toHaveBeenCalledTimes(2);
   });
 
@@ -118,15 +118,15 @@ describe("Lavacord", () => {
       return Promise.resolve();
     });
 
-    const lavacord = new Lavacord(BASE_OPTIONS);
+    const lunacord = new Lunacord(BASE_OPTIONS);
 
-    await expect(lavacord.connect()).rejects.toThrow("Failed to connect node node-b: boom");
+    await expect(lunacord.connect()).rejects.toThrow("Failed to connect node node-b: boom");
     expect(connectSpy).toHaveBeenCalledTimes(2);
   });
 
   it("should choose the least-loaded node for new players", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const [nodeA, nodeB] = lavacord.getNodes();
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
 
     nodeA!.sessionId = "session-a";
     nodeB!.sessionId = "session-b";
@@ -134,46 +134,46 @@ describe("Lavacord", () => {
     const existing = nodeA!.createPlayer("guild-existing");
     expect(existing.guildId).toBe("guild-existing");
 
-    const player = lavacord.createPlayer("guild-new");
+    const player = lunacord.createPlayer("guild-new");
 
     expect(player.guildId).toBe("guild-new");
     expect(nodeB!.getPlayer("guild-new")).toBe(player);
   });
 
   it("should reuse the same player for the same guild", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const [nodeA, nodeB] = lavacord.getNodes();
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
 
     nodeA!.sessionId = "session-a";
     nodeB!.sessionId = "session-b";
 
-    const player = lavacord.createPlayer("guild-123");
-    const samePlayer = lavacord.createPlayer("guild-123");
+    const player = lunacord.createPlayer("guild-123");
+    const samePlayer = lunacord.createPlayer("guild-123");
 
     expect(samePlayer).toBe(player);
-    expect(lavacord.getPlayer("guild-123")).toBe(player);
+    expect(lunacord.getPlayer("guild-123")).toBe(player);
   });
 
   it("should remove manager bookkeeping when a player is destroyed", async () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const [nodeA, nodeB] = lavacord.getNodes();
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
 
     nodeA!.sessionId = "session-a";
     nodeB!.sessionId = "session-b";
     nodeA!.rest.destroyPlayer = mock(() => Promise.resolve());
 
-    lavacord.createPlayer("guild-123");
-    await lavacord.destroyPlayer("guild-123");
+    lunacord.createPlayer("guild-123");
+    await lunacord.destroyPlayer("guild-123");
 
-    expect(lavacord.getPlayer("guild-123")).toBeUndefined();
+    expect(lunacord.getPlayer("guild-123")).toBeUndefined();
   });
 
   it("should re-emit node events with node context", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const node = lavacord.getNode("node-a")!;
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
     const readyEvents: string[] = [];
 
-    lavacord.on("ready", ({ node: sourceNode }) => {
+    lunacord.on("ready", ({ node: sourceNode }) => {
       readyEvents.push(sourceNode.id);
     });
 
@@ -183,11 +183,11 @@ describe("Lavacord", () => {
   });
 
   it("should re-emit nodeConnect with node context", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const node = lavacord.getNode("node-a")!;
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
     const events: string[] = [];
 
-    lavacord.on("nodeConnect", ({ node: sourceNode, sessionId }) => {
+    lunacord.on("nodeConnect", ({ node: sourceNode, sessionId }) => {
       events.push(`${sourceNode.id}:${sessionId}`);
     });
 
@@ -197,25 +197,27 @@ describe("Lavacord", () => {
   });
 
   it("should re-emit node errors with node context", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const node = lavacord.getNode("node-a")!;
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
     const errors: string[] = [];
+    const original = new Error("node failed");
 
-    lavacord.on("error", (error) => {
+    lunacord.on("error", (error) => {
       errors.push(`${error.node.id}:${error.message}`);
     });
 
-    node.emit("error", new Error("node failed"));
+    node.emit("error", original);
 
     expect(errors).toEqual(["node-a:node failed"]);
+    expect("node" in original).toBe(false);
   });
 
   it("should re-emit nodeError with node context", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const node = lavacord.getNode("node-a")!;
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
     const errors: string[] = [];
 
-    lavacord.on("nodeError", (error) => {
+    lunacord.on("nodeError", (error) => {
       errors.push(`${error.node.id}:${error.message}`);
     });
 
@@ -225,11 +227,11 @@ describe("Lavacord", () => {
   });
 
   it("should re-emit playerDestroy with node context", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const node = lavacord.getNode("node-a")!;
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
     const events: string[] = [];
 
-    lavacord.on("playerDestroy", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerDestroy", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:${guildId}`);
     });
 
@@ -239,54 +241,54 @@ describe("Lavacord", () => {
   });
 
   it("should re-emit all player action events with node context", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const node = lavacord.getNode("node-a")!;
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
     const track = new Track(MOCK_RAW_TRACK);
     const events: string[] = [];
 
-    lavacord.on("playerCreate", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerCreate", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:create:${guildId}`);
     });
-    lavacord.on("playerConnect", ({ guildId, channelId, node: sourceNode }) => {
+    lunacord.on("playerConnect", ({ guildId, channelId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:connect:${guildId}:${channelId}`);
     });
-    lavacord.on("playerDisconnect", ({ guildId, reason, node: sourceNode }) => {
+    lunacord.on("playerDisconnect", ({ guildId, reason, node: sourceNode }) => {
       events.push(`${sourceNode.id}:disconnect:${guildId}:${reason}`);
     });
-    lavacord.on("playerPause", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerPause", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:pause:${guildId}`);
     });
-    lavacord.on("playerResume", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerResume", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:resume:${guildId}`);
     });
-    lavacord.on("playerPlay", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerPlay", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:play:${guildId}`);
     });
-    lavacord.on("playerQueueAdd", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerQueueAdd", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:queueAdd:${guildId}`);
     });
-    lavacord.on("playerQueueRemove", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerQueueRemove", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:queueRemove:${guildId}`);
     });
-    lavacord.on("playerRepeatQueue", ({ guildId, enabled, node: sourceNode }) => {
+    lunacord.on("playerRepeatQueue", ({ guildId, enabled, node: sourceNode }) => {
       events.push(`${sourceNode.id}:repeatQueue:${guildId}:${enabled ? "on" : "off"}`);
     });
-    lavacord.on("playerRepeatTrack", ({ guildId, enabled, node: sourceNode }) => {
+    lunacord.on("playerRepeatTrack", ({ guildId, enabled, node: sourceNode }) => {
       events.push(`${sourceNode.id}:repeatTrack:${guildId}:${enabled ? "on" : "off"}`);
     });
-    lavacord.on("playerSkip", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerSkip", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:skip:${guildId}`);
     });
-    lavacord.on("playerStop", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerStop", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:stop:${guildId}`);
     });
-    lavacord.on("playerFiltersUpdate", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerFiltersUpdate", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:filtersUpdate:${guildId}`);
     });
-    lavacord.on("playerFiltersClear", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerFiltersClear", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:filtersClear:${guildId}`);
     });
-    lavacord.on("playerVolumeUpdate", ({ guildId, node: sourceNode }) => {
+    lunacord.on("playerVolumeUpdate", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:volume:${guildId}`);
     });
 
@@ -375,11 +377,11 @@ describe("Lavacord", () => {
   });
 
   it("should re-emit ws with node context", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const node = lavacord.getNode("node-a")!;
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
     const events: string[] = [];
 
-    lavacord.on("ws", (event) => {
+    lunacord.on("ws", (event) => {
       if (event.type === "nodeReconnecting") {
         events.push(`${event.node.id}:${event.attempt}:${event.delay}`);
       }
@@ -395,11 +397,11 @@ describe("Lavacord", () => {
   });
 
   it("should re-emit nodeVoiceSocketClosed with node context", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const node = lavacord.getNode("node-a")!;
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
     const events: string[] = [];
 
-    lavacord.on("nodeVoiceSocketClosed", (event) => {
+    lunacord.on("nodeVoiceSocketClosed", (event) => {
       events.push(`${event.node.id}:${event.guildId}:${event.code}:${event.reason}`);
     });
 
@@ -414,18 +416,18 @@ describe("Lavacord", () => {
   });
 
   it("should route voice packets to the owning node", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const [nodeA, nodeB] = lavacord.getNodes();
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
 
     nodeA!.sessionId = "session-a";
     nodeB!.sessionId = "session-b";
 
-    lavacord.createPlayer("guild-123");
+    lunacord.createPlayer("guild-123");
 
     nodeA!.handleVoicePacket = mock(() => {});
     nodeB!.handleVoicePacket = mock(() => {});
 
-    lavacord.handleVoicePacket({
+    lunacord.handleVoicePacket({
       t: "VOICE_STATE_UPDATE",
       d: {
         guild_id: "guild-123",
@@ -437,15 +439,15 @@ describe("Lavacord", () => {
   });
 
   it("should fan out voice packets when no guild owner exists yet", () => {
-    const lavacord = new Lavacord(BASE_OPTIONS);
-    const [nodeA, nodeB] = lavacord.getNodes();
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
 
     nodeA!.sessionId = "session-a";
     nodeB!.sessionId = "session-b";
     nodeA!.handleVoicePacket = mock(() => {});
     nodeB!.handleVoicePacket = mock(() => {});
 
-    lavacord.handleVoicePacket({
+    lunacord.handleVoicePacket({
       t: "VOICE_SERVER_UPDATE",
       d: {
         guild_id: "guild-999",
@@ -458,12 +460,12 @@ describe("Lavacord", () => {
 
   it("should call the shared voice callback for connectVoice", async () => {
     const sendGatewayPayload = mock(() => Promise.resolve());
-    const lavacord = new Lavacord({
+    const lunacord = new Lunacord({
       ...BASE_OPTIONS,
       sendGatewayPayload,
     });
 
-    await lavacord.connectVoice("guild-123", "channel-123");
+    await lunacord.connectVoice("guild-123", "channel-123");
 
     expect(sendGatewayPayload).toHaveBeenCalledWith("guild-123", {
       op: 4,
@@ -478,19 +480,19 @@ describe("Lavacord", () => {
 
   it("should connect a player to voice with connectPlayer", async () => {
     const sendGatewayPayload = mock(() => Promise.resolve());
-    const lavacord = new Lavacord({
+    const lunacord = new Lunacord({
       ...BASE_OPTIONS,
       sendGatewayPayload,
     });
-    const [nodeA, nodeB] = lavacord.getNodes();
+    const [nodeA, nodeB] = lunacord.getNodes();
 
     nodeA!.sessionId = "session-a";
     nodeB!.sessionId = "session-b";
 
-    const player = await lavacord.connectPlayer("guild-123", "channel-123");
+    const player = await lunacord.connectPlayer("guild-123", "channel-123");
 
     expect(player.guildId).toBe("guild-123");
-    expect(lavacord.isPlayerConnected("guild-123")).toBe(true);
+    expect(lunacord.isPlayerConnected("guild-123")).toBe(true);
     expect(sendGatewayPayload).toHaveBeenCalledWith("guild-123", {
       op: 4,
       d: {
@@ -504,17 +506,17 @@ describe("Lavacord", () => {
 
   it("should route disconnectVoice through the owning node", async () => {
     const sendGatewayPayload = mock(() => Promise.resolve());
-    const lavacord = new Lavacord({
+    const lunacord = new Lunacord({
       ...BASE_OPTIONS,
       sendGatewayPayload,
     });
-    const [nodeA, nodeB] = lavacord.getNodes();
+    const [nodeA, nodeB] = lunacord.getNodes();
 
     nodeA!.sessionId = "session-a";
     nodeB!.sessionId = "session-b";
 
-    lavacord.createPlayer("guild-123");
-    await lavacord.disconnectVoice("guild-123");
+    lunacord.createPlayer("guild-123");
+    await lunacord.disconnectVoice("guild-123");
 
     expect(sendGatewayPayload).toHaveBeenCalledWith("guild-123", {
       op: 4,
@@ -525,5 +527,13 @@ describe("Lavacord", () => {
         self_deaf: false,
       },
     });
+  });
+
+  it("should disconnect synchronously", () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+
+    const result = lunacord.disconnect();
+
+    expect(result).toBeUndefined();
   });
 });
