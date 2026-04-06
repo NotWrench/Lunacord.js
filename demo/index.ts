@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits } from "discord.js";
-import { Lunacord } from "../index.ts";
+import { Lunacord } from "../index";
 
 const TOKEN = process.env.DISCORD_TOKEN;
 

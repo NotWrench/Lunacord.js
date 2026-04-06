@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { TypedEventEmitter } from "../utils/EventEmitter.ts";
+import { TypedEventEmitter } from "../utils/EventEmitter";
 
 interface TestEvents {
   value: { count: number };

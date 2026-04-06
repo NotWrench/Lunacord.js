@@ -1,4 +1,4 @@
-import type { Track } from "./Track.ts";
+import type { Track } from "./Track";
 
 export interface QueueRemoveDuplicateOptions {
   by?: "encoded" | "uri";

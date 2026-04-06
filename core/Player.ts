@@ -1,12 +1,12 @@
 // core/Player.ts
 
-import type { Rest } from "../rest/Rest.ts";
-import { Queue, type QueueRemoveDuplicateOptions } from "../structures/Queue.ts";
-import type { SearchResult } from "../structures/SearchResult.ts";
-import { toSearchResult } from "../structures/SearchResult.ts";
-import type { Track } from "../structures/Track.ts";
-import type { Filters, PlayerState, PlayerUpdatePayload, SearchProvider } from "../types.ts";
-import type { VoiceConnectOptions } from "./Node.ts";
+import type { Rest } from "../rest/Rest";
+import { Queue, type QueueRemoveDuplicateOptions } from "../structures/Queue";
+import type { SearchResult } from "../structures/SearchResult";
+import { toSearchResult } from "../structures/SearchResult";
+import type { Track } from "../structures/Track";
+import type { Filters, PlayerState, PlayerUpdatePayload, SearchProvider } from "../types";
+import type { VoiceConnectOptions } from "./Node";
 
 const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;

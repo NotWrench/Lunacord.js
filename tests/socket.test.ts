@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Socket } from "../websocket/Socket.ts";
+import { Socket } from "../websocket/Socket";
 
 const SOCKET_OPTIONS = {
   host: "localhost",

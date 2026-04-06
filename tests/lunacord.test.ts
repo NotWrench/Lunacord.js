@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
-import { Lunacord } from "../core/Lunacord.ts";
-import { Node } from "../core/Node.ts";
-import { Track } from "../structures/Track.ts";
-import { type LoadResult, type RawTrack, SearchProvider } from "../types.ts";
+import { Lunacord } from "../core/Lunacord";
+import { Node } from "../core/Node";
+import { Track } from "../structures/Track";
+import { type LoadResult, type RawTrack, SearchProvider } from "../types";
 
 const BASE_OPTIONS = {
   nodes: [

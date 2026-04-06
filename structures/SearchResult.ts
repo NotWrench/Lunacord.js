@@ -1,5 +1,5 @@
-import type { Exception, LoadResult, PlaylistInfo } from "../types.ts";
-import { Track } from "./Track.ts";
+import type { Exception, LoadResult, PlaylistInfo } from "../types";
+import { Track } from "./Track";
 
 export interface SearchResultTrack {
   loadType: "track";

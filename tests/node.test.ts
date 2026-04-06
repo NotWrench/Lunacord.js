@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
-import { Node } from "../core/Node.ts";
-import { Track } from "../structures/Track.ts";
-import type { RawTrack } from "../types.ts";
+import { Node } from "../core/Node";
+import { Track } from "../structures/Track";
+import type { RawTrack } from "../types";
 
 const NODE_OPTIONS = {
   host: "localhost",

@@ -14,7 +14,7 @@ import {
   SessionSchema,
   TrackSchema,
   type VersionResponse,
-} from "../types.ts";
+} from "../types";
 
 export class LavalinkRestError extends Error {
   readonly status: number;

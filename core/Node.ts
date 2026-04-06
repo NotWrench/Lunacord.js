@@ -1,8 +1,8 @@
 // core/Node.ts
 
-import { Rest } from "../rest/Rest.ts";
-import type { SearchResult } from "../structures/SearchResult.ts";
-import { Track } from "../structures/Track.ts";
+import { Rest } from "../rest/Rest";
+import type { SearchResult } from "../structures/SearchResult";
+import { Track } from "../structures/Track";
 import type {
   Exception,
   PlayerState,
@@ -11,10 +11,10 @@ import type {
   SearchProvider,
   Stats,
   TrackEvent,
-} from "../types.ts";
-import { TypedEventEmitter } from "../utils/EventEmitter.ts";
-import { Socket } from "../websocket/Socket.ts";
-import { Player, type PlayerActionEvent } from "./Player.ts";
+} from "../types";
+import { TypedEventEmitter } from "../utils/EventEmitter";
+import { Socket } from "../websocket/Socket";
+import { Player, type PlayerActionEvent } from "./Player";
 
 export type NodeWsEvent =
   | {

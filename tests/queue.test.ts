@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, spyOn, vi } from "bun:test";
-import { Queue } from "../structures/Queue.ts";
-import { Track } from "../structures/Track.ts";
-import type { RawTrack } from "../types.ts";
+import { Queue } from "../structures/Queue";
+import { Track } from "../structures/Track";
+import type { RawTrack } from "../types";
 
 const MOCK_RAW_TRACK: RawTrack = {
   encoded: "track-1",

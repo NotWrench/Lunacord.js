@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
-import { Track } from "../structures/Track.ts";
-import { type RawTrack, TrackSchema } from "../types.ts";
+import { Track } from "../structures/Track";
+import { type RawTrack, TrackSchema } from "../types";
 
 const MOCK_RAW_TRACK: RawTrack = {
   encoded: "encoded-track",

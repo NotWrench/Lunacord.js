@@ -8,15 +8,15 @@ export {
   type LunacordNodeSelectionStrategy,
   type LunacordPlugin,
   type LunacordPluginEvent,
-} from "./core/Lunacord.ts";
-export { Node } from "./core/Node.ts";
+} from "./core/Lunacord";
+export { Node } from "./core/Node";
 export {
   BASSBOOST_FILTERS,
   KARAOKE_FILTERS,
   NIGHTCORE_FILTERS,
   Player,
   VAPORWAVE_FILTERS,
-} from "./core/Player.ts";
+} from "./core/Player";
 // Errors
 export {
   LavalinkRestError,
@@ -27,10 +27,10 @@ export {
   type RestRequestPatch,
   type RestResponseContext,
   ValidationError,
-} from "./rest/Rest.ts";
-export { Queue, type QueueRemoveDuplicateOptions } from "./structures/Queue.ts";
-export type { SearchResult } from "./structures/SearchResult.ts";
-export { Track } from "./structures/Track.ts";
+} from "./rest/Rest";
+export { Queue, type QueueRemoveDuplicateOptions } from "./structures/Queue";
+export type { SearchResult } from "./structures/SearchResult";
+export { Track } from "./structures/Track";
 // Types (re-export)
 export type {
   Exception,
@@ -50,7 +50,7 @@ export type {
   TrackInfo,
   VersionResponse,
   WebSocketMessage,
-} from "./types.ts";
+} from "./types";
 // Zod schemas (for consumers who want to validate themselves)
 export {
   buildSearchIdentifier,
@@ -82,6 +82,6 @@ export {
   VersionResponseSchema,
   WebSocketClosedEventSchema,
   WebSocketMessageSchema,
-} from "./types.ts";
-export { TypedEventEmitter } from "./utils/EventEmitter.ts";
-export { Socket } from "./websocket/Socket.ts";
+} from "./types";
+export { TypedEventEmitter } from "./utils/EventEmitter";
+export { Socket } from "./websocket/Socket";

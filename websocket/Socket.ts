@@ -5,8 +5,8 @@ import {
   type Stats,
   type TrackEvent,
   WebSocketMessageSchema,
-} from "../types.ts";
-import { TypedEventEmitter } from "../utils/EventEmitter.ts";
+} from "../types";
+import { TypedEventEmitter } from "../utils/EventEmitter";
 
 interface SocketEvents {
   close: { code: number; reason: string };

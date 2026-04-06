@@ -1,11 +1,11 @@
 // tests/player.test.ts
 import { beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
-import type { PlayerNodeAdapter } from "../core/Player.ts";
-import { Player } from "../core/Player.ts";
-import { Queue } from "../structures/Queue.ts";
-import type { SearchResult } from "../structures/SearchResult.ts";
-import { Track } from "../structures/Track.ts";
-import { type Filters, type LoadResult, type RawTrack, SearchProvider } from "../types.ts";
+import type { PlayerNodeAdapter } from "../core/Player";
+import { Player } from "../core/Player";
+import { Queue } from "../structures/Queue";
+import type { SearchResult } from "../structures/SearchResult";
+import { Track } from "../structures/Track";
+import { type Filters, type LoadResult, type RawTrack, SearchProvider } from "../types";
 
 const MOCK_RAW_TRACK: RawTrack = {
   encoded: "QAABJAMACk5ldmVyIEdvbm5h...",

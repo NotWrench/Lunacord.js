@@ -3,18 +3,18 @@ import type {
   RestRequestContext,
   RestRequestPatch,
   RestResponseContext,
-} from "../rest/Rest.ts";
-import type { SearchResult } from "../structures/SearchResult.ts";
-import type { SearchProvider } from "../types.ts";
-import { TypedEventEmitter } from "../utils/EventEmitter.ts";
+} from "../rest/Rest";
+import type { SearchResult } from "../structures/SearchResult";
+import type { SearchProvider } from "../types";
+import { TypedEventEmitter } from "../utils/EventEmitter";
 import {
   type GatewayVoiceStatePayload,
   Node,
   type NodeEvents,
   type NodeOptions,
   type VoiceConnectOptions,
-} from "./Node.ts";
-import type { Player } from "./Player.ts";
+} from "./Node";
+import type { Player } from "./Player";
 
 export class LunacordError extends Error {
   override readonly cause?: unknown;

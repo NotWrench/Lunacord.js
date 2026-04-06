@@ -1,5 +1,5 @@
 // structures/Track.ts
-import { type RawTrack, TrackSchema } from "../types.ts";
+import { type RawTrack, TrackSchema } from "../types";
 
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
