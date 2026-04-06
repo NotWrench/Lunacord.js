@@ -1,14 +1,19 @@
-import type { z } from "zod";
+import { z } from "zod";
 import {
   buildSearchIdentifier,
+  type InfoResponse,
+  InfoResponseSchema,
   type LoadResult,
   LoadResultSchema,
   type PlayerUpdatePayload,
   type RawTrack,
+  type RoutePlannerStatus,
+  RoutePlannerStatusSchema,
   type SearchProvider,
   type Session,
   SessionSchema,
   TrackSchema,
+  type VersionResponse,
 } from "../types.ts";
 
 export class LavalinkRestError extends Error {
@@ -42,6 +47,38 @@ interface RestOptions {
   retryDelayMs?: number;
 }
 
+export interface RestRequestContext {
+  body?: unknown;
+  method: string;
+  path: string;
+  url: string;
+}
+
+export interface RestRequestPatch {
+  body?: unknown;
+  method?: string;
+  path?: string;
+}
+
+export interface RestResponseContext {
+  data: unknown;
+  request: RestRequestContext;
+  response: Response;
+}
+
+export interface RestErrorContext {
+  error: unknown;
+  request: RestRequestContext;
+}
+
+export interface RestMiddleware {
+  afterResponse?: (context: RestResponseContext) => Promise<unknown | void> | unknown | void;
+  beforeRequest?: (
+    context: RestRequestContext
+  ) => Promise<RestRequestPatch | void> | RestRequestPatch | void;
+  onError?: (context: RestErrorContext) => Promise<void> | void;
+}
+
 const TRAILING_SLASH = /\/$/;
 const DEFAULT_ERROR_MESSAGE = "Request failed";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
@@ -52,6 +89,7 @@ const RETRYABLE_STATUS_CODES = new Set([408, 429, 502, 503, 504]);
 export class Rest {
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
+  private readonly middlewares: RestMiddleware[] = [];
   private readonly requestTimeoutMs: number;
   private readonly retryAttempts: number;
   private readonly retryDelayMs: number;
@@ -98,26 +136,52 @@ export class Rest {
     schema?: z.ZodType<T>,
     body?: unknown
   ): Promise<T | void> {
-    const url = `${this.baseUrl}${path}`;
+    const { request, response } = await this.sendRequest(method, path, body);
+
+    if (!schema) {
+      return;
+    }
+
+    const data = await this.readJsonResponse(request, response);
+    const result = schema.safeParse(data);
+
+    if (!result.success) {
+      throw new ValidationError(result.error.issues);
+    }
+
+    return result.data;
+  }
+
+  private async requestText(method: string, path: string): Promise<string> {
+    const { response } = await this.sendRequest(method, path);
+    return response.text();
+  }
+
+  private async sendRequest(
+    method: string,
+    path: string,
+    body?: unknown
+  ): Promise<{ request: RestRequestContext; response: Response }> {
     let attempt = 0;
 
     while (true) {
+      const preparedRequest = await this.prepareRequest(method, path, body);
       const controller = new AbortController();
       const timeout = setTimeout(() => {
         controller.abort();
       }, this.requestTimeoutMs);
       const init: RequestInit = {
-        method,
+        method: preparedRequest.method,
         headers: this.headers,
         signal: controller.signal,
       };
 
-      if (body !== undefined) {
-        init.body = JSON.stringify(body);
+      if (preparedRequest.body !== undefined) {
+        init.body = JSON.stringify(preparedRequest.body);
       }
 
       try {
-        const response = await fetch(url, init);
+        const response = await fetch(preparedRequest.url, init);
 
         if (!response.ok) {
           if (this.shouldRetryResponse(response.status, attempt)) {
@@ -127,21 +191,13 @@ export class Rest {
           }
 
           const message = await this.parseErrorMessage(response);
-          throw new LavalinkRestError(message, response.status, path);
+          throw new LavalinkRestError(message, response.status, preparedRequest.path);
         }
 
-        if (!schema) {
-          return;
-        }
-
-        const data: unknown = await response.json();
-        const result = schema.safeParse(data);
-
-        if (!result.success) {
-          throw new ValidationError(result.error.issues);
-        }
-
-        return result.data;
+        return {
+          request: preparedRequest,
+          response,
+        };
       } catch (error) {
         if (this.shouldRetryError(error, attempt)) {
           attempt++;
@@ -149,14 +205,76 @@ export class Rest {
           continue;
         }
 
-        if (error instanceof DOMException && error.name === "AbortError") {
-          throw new Error(`Request timed out after ${this.requestTimeoutMs}ms`);
-        }
+        const finalError =
+          error instanceof DOMException && error.name === "AbortError"
+            ? new Error(`Request timed out after ${this.requestTimeoutMs}ms`)
+            : error;
 
-        throw error;
+        await this.notifyError({
+          request: preparedRequest,
+          error: finalError,
+        });
+
+        throw finalError;
       } finally {
         clearTimeout(timeout);
       }
+    }
+  }
+
+  private async prepareRequest(
+    method: string,
+    path: string,
+    body?: unknown
+  ): Promise<RestRequestContext> {
+    let request: RestRequestContext = {
+      method,
+      path,
+      body,
+      url: `${this.baseUrl}${path}`,
+    };
+
+    for (const middleware of this.middlewares) {
+      const patch = await middleware.beforeRequest?.(request);
+      if (!patch) {
+        continue;
+      }
+
+      request = {
+        method: patch.method ?? request.method,
+        path: patch.path ?? request.path,
+        body: patch.body ?? request.body,
+        url: `${this.baseUrl}${patch.path ?? request.path}`,
+      };
+    }
+
+    return request;
+  }
+
+  private async readJsonResponse(
+    request: RestRequestContext,
+    response: Response
+  ): Promise<unknown> {
+    let data: unknown = await response.json();
+
+    for (const middleware of this.middlewares) {
+      const nextData = await middleware.afterResponse?.({
+        request,
+        response,
+        data,
+      });
+
+      if (nextData !== undefined) {
+        data = nextData;
+      }
+    }
+
+    return data;
+  }
+
+  private async notifyError(context: RestErrorContext): Promise<void> {
+    for (const middleware of this.middlewares) {
+      await middleware.onError?.(context);
     }
   }
 
@@ -186,6 +304,10 @@ export class Rest {
     return attempt < this.retryAttempts && RETRYABLE_STATUS_CODES.has(status);
   }
 
+  use(middleware: RestMiddleware): void {
+    this.middlewares.push(middleware);
+  }
+
   loadTracks(identifier: string): Promise<LoadResult> {
     const encodedIdentifier = encodeURIComponent(identifier);
     return this.request("GET", `/v4/loadtracks?identifier=${encodedIdentifier}`, LoadResultSchema);
@@ -198,6 +320,22 @@ export class Rest {
   decodeTrack(encodedTrack: string): Promise<RawTrack> {
     const encoded = encodeURIComponent(encodedTrack);
     return this.request("GET", `/v4/decodetrack?encodedTrack=${encoded}`, TrackSchema);
+  }
+
+  decodeTracks(encodedTracks: string[]): Promise<RawTrack[]> {
+    return this.request("POST", "/v4/decodetracks", z.array(TrackSchema), encodedTracks);
+  }
+
+  getInfo(): Promise<InfoResponse> {
+    return this.request("GET", "/v4/info", InfoResponseSchema);
+  }
+
+  getRoutePlannerStatus(): Promise<RoutePlannerStatus> {
+    return this.request("GET", "/v4/routeplanner/status", RoutePlannerStatusSchema);
+  }
+
+  getVersion(): Promise<VersionResponse> {
+    return this.requestText("GET", "/version");
   }
 
   updatePlayer(

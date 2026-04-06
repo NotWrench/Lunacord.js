@@ -540,6 +540,85 @@ describe("Node", () => {
     });
   });
 
+  describe("player state sync", () => {
+    it("should update player state from playerUpdate payloads", () => {
+      const player = node.createPlayer("guild-sync");
+      player.current = new Track(MOCK_RAW_TRACK);
+
+      node.socket.emit("playerUpdate", {
+        op: "playerUpdate",
+        guildId: "guild-sync",
+        state: {
+          time: 1_000,
+          position: 5_000,
+          connected: true,
+          ping: 77,
+        },
+      });
+
+      expect(player.position).toBe(5_000);
+      expect(player.isConnected).toBe(true);
+      expect(player.ping).toBe(77);
+    });
+  });
+
+  describe("restore", () => {
+    it("should restore managed player state after reconnect", async () => {
+      node.sessionId = "session-123";
+      node.rest.updatePlayer = mock(() => Promise.resolve());
+
+      const player = node.createPlayer("guild-restore");
+      player.current = new Track(MOCK_RAW_TRACK);
+      player.volume = 250;
+      player.paused = true;
+      player.filters = {
+        timescale: {
+          speed: 1.1,
+        },
+      };
+      player.position = 12_000;
+
+      node.handleVoicePacket({
+        t: "VOICE_STATE_UPDATE",
+        d: {
+          guild_id: "guild-restore",
+          user_id: "user-123",
+          session_id: "voice-session-restore",
+          channel_id: "channel-restore",
+        },
+      });
+      node.handleVoicePacket({
+        t: "VOICE_SERVER_UPDATE",
+        d: {
+          guild_id: "guild-restore",
+          token: "voice-token-restore",
+          endpoint: "us-east.discord.gg",
+        },
+      });
+
+      await node.restorePlayer(player);
+
+      expect(node.rest.updatePlayer).toHaveBeenCalledWith("session-123", "guild-restore", {
+        track: {
+          encoded: MOCK_RAW_TRACK.encoded,
+        },
+        position: 12_000,
+        volume: 250,
+        paused: true,
+        filters: {
+          timescale: {
+            speed: 1.1,
+          },
+        },
+        voice: {
+          endpoint: "us-east.discord.gg",
+          sessionId: "voice-session-restore",
+          token: "voice-token-restore",
+        },
+      });
+    });
+  });
+
   describe("stats", () => {
     it("should cache the latest stats payload", () => {
       expect(node.latestStats).toBeNull();

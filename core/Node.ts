@@ -1,12 +1,14 @@
 // core/Node.ts
 
 import { Rest } from "../rest/Rest.ts";
+import type { SearchResult } from "../structures/SearchResult.ts";
 import { Track } from "../structures/Track.ts";
 import type {
   Exception,
   PlayerState,
   PlayerUpdatePayload,
   ReadyPayload,
+  SearchProvider,
   Stats,
   TrackEvent,
 } from "../types.ts";
@@ -61,10 +63,15 @@ export interface NodeEvents {
   playerPause: PlayerActionPayload<"playerPause">;
   playerPlay: PlayerActionPayload<"playerPlay">;
   playerQueueAdd: PlayerActionPayload<"playerQueueAdd">;
+  playerQueueDedupe: PlayerActionPayload<"playerQueueDedupe">;
+  playerQueueInsert: PlayerActionPayload<"playerQueueInsert">;
+  playerQueueMove: PlayerActionPayload<"playerQueueMove">;
   playerQueueRemove: PlayerActionPayload<"playerQueueRemove">;
+  playerQueueShuffle: PlayerActionPayload<"playerQueueShuffle">;
   playerRepeatQueue: PlayerActionPayload<"playerRepeatQueue">;
   playerRepeatTrack: PlayerActionPayload<"playerRepeatTrack">;
   playerResume: PlayerActionPayload<"playerResume">;
+  playerSeek: PlayerActionPayload<"playerSeek">;
   playerSkip: PlayerActionPayload<"playerSkip">;
   playerStop: PlayerActionPayload<"playerStop">;
   playerUpdate: { guildId: string; state: PlayerState };
@@ -89,6 +96,7 @@ export interface NodeOptions {
   numShards: number;
   password: string;
   port: number;
+  regions?: readonly string[];
   requestRetryAttempts?: number;
   requestRetryDelayMs?: number;
   requestTimeoutMs?: number;
@@ -158,6 +166,12 @@ export class Node extends TypedEventEmitter<NodeEvents> {
   private readonly voiceWaiters = new Map<string, VoiceWaiter[]>();
   private connectPromise: Promise<void> | null = null;
   private connectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private searchResultTransformer?:
+    | ((
+        context: { guildId: string; player: Player; provider?: SearchProvider; query: string },
+        result: SearchResult
+      ) => Promise<SearchResult> | SearchResult)
+    | undefined;
   private voicePacketForwardingEnabled = false;
 
   constructor(options: NodeOptions) {
@@ -285,6 +299,10 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
   get playerCount(): number {
     return this.players.size;
+  }
+
+  get regions(): readonly string[] {
+    return this.options.regions ?? [];
   }
 
   get connected(): boolean {
@@ -429,11 +447,39 @@ export class Node extends TypedEventEmitter<NodeEvents> {
           queueSize: event.queueSize,
         });
         return;
+      case "playerQueueDedupe":
+        this.emit("playerQueueDedupe", {
+          guildId: event.guildId,
+          removedCount: event.removedCount,
+          by: event.by,
+        });
+        return;
+      case "playerQueueInsert":
+        this.emit("playerQueueInsert", {
+          guildId: event.guildId,
+          track: event.track,
+          index: event.index,
+          queueSize: event.queueSize,
+        });
+        return;
+      case "playerQueueMove":
+        this.emit("playerQueueMove", {
+          guildId: event.guildId,
+          from: event.from,
+          to: event.to,
+        });
+        return;
       case "playerQueueRemove":
         this.emit("playerQueueRemove", {
           guildId: event.guildId,
           track: event.track,
           index: event.index,
+          queueSize: event.queueSize,
+        });
+        return;
+      case "playerQueueShuffle":
+        this.emit("playerQueueShuffle", {
+          guildId: event.guildId,
           queueSize: event.queueSize,
         });
         return;
@@ -460,6 +506,12 @@ export class Node extends TypedEventEmitter<NodeEvents> {
           skippedTrack: event.skippedTrack,
           nextTrack: event.nextTrack,
           reason: event.reason,
+        });
+        return;
+      case "playerSeek":
+        this.emit("playerSeek", {
+          guildId: event.guildId,
+          position: event.position,
         });
         return;
       case "playerStop":
@@ -502,8 +554,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     this.socket.on("playerUpdate", (update) => {
       const player = this.players.get(update.guildId);
       if (player) {
-        player.position = update.state.position;
-        player.connected = update.state.connected;
+        player.applyState(update.state);
       }
       this.emit("playerUpdate", {
         guildId: update.guildId,
@@ -850,5 +901,62 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     reason: "finished" | "loadFailed" | "stopped" | "replaced" | "cleanup"
   ): reason is AutoAdvanceReason {
     return AUTO_ADVANCE_REASONS.has(reason as AutoAdvanceReason);
+  }
+
+  setSearchResultTransformer(
+    transformer:
+      | ((
+          context: { guildId: string; player: Player; provider?: SearchProvider; query: string },
+          result: SearchResult
+        ) => Promise<SearchResult> | SearchResult)
+      | undefined
+  ): void {
+    this.searchResultTransformer = transformer;
+  }
+
+  async transformSearchResult(
+    context: { guildId: string; player: Player; provider?: SearchProvider; query: string },
+    result: SearchResult
+  ): Promise<SearchResult> {
+    return (await this.searchResultTransformer?.(context, result)) ?? result;
+  }
+
+  async restorePlayer(player: Player): Promise<void> {
+    if (!this.sessionId) {
+      throw new Error(`Node ${this.id} is not connected`);
+    }
+
+    const snapshot = player.getRestoreState();
+    const voicePayload = this.getVoicePayload(player.guildId);
+    const payload: PlayerUpdatePayload = {};
+
+    if (snapshot.current) {
+      payload.track = { encoded: snapshot.current.encoded };
+      if (snapshot.position > 0) {
+        payload.position = snapshot.position;
+      }
+    }
+
+    if (snapshot.volume !== 100) {
+      payload.volume = snapshot.volume;
+    }
+
+    if (snapshot.paused) {
+      payload.paused = true;
+    }
+
+    if (Object.keys(snapshot.filters).length > 0) {
+      payload.filters = snapshot.filters;
+    }
+
+    if (voicePayload) {
+      payload.voice = voicePayload;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return;
+    }
+
+    await this.rest.updatePlayer(this.sessionId, player.guildId, payload);
   }
 }

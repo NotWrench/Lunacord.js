@@ -374,6 +374,8 @@ export const VersionObjectSchema = z.object({
   preRelease: z.string().nullable().optional(),
   build: z.string().nullable().optional(),
 });
+export const VersionResponseSchema = z.string();
+export type VersionResponse = z.infer<typeof VersionResponseSchema>;
 
 export const GitObjectSchema = z.object({
   branch: z.string(),

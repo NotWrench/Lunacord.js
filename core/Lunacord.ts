@@ -1,3 +1,11 @@
+import type {
+  RestErrorContext,
+  RestRequestContext,
+  RestRequestPatch,
+  RestResponseContext,
+} from "../rest/Rest.ts";
+import type { SearchResult } from "../structures/SearchResult.ts";
+import type { SearchProvider } from "../types.ts";
 import { TypedEventEmitter } from "../utils/EventEmitter.ts";
 import {
   type GatewayVoiceStatePayload,
@@ -29,15 +37,44 @@ export interface LunacordNodeOptions {
   maxReconnectDelayMs?: number;
   password: string;
   port: number;
+  regions?: readonly string[];
   requestRetryAttempts?: number;
   requestRetryDelayMs?: number;
   requestTimeoutMs?: number;
   secure?: boolean;
 }
 
+export type LunacordNodeSelectionStrategy =
+  | {
+      type?: "leastLoaded";
+    }
+  | {
+      type: "roundRobin";
+    }
+  | {
+      cpuWeight?: number;
+      memoryWeight?: number;
+      playerWeight?: number;
+      type: "weighted";
+    }
+  | {
+      fallback?: "failover" | "leastLoaded" | "roundRobin" | "weighted";
+      type: "region";
+    }
+  | {
+      order: readonly string[];
+      type: "failover";
+    };
+
+export interface CreatePlayerOptions {
+  preferredNodeIds?: readonly string[];
+  region?: string;
+}
+
 export interface LunacordOptions {
   autoConnect?: boolean;
   clientName?: string;
+  nodeSelection?: LunacordNodeSelectionStrategy;
   nodes: readonly LunacordNodeOptions[];
   numShards: number;
   resume?: boolean;
@@ -66,10 +103,15 @@ export interface LunacordEvents extends NodeBoundEvents {
   playerPause: NodeBound<NodeEvents["playerPause"]>;
   playerPlay: NodeBound<NodeEvents["playerPlay"]>;
   playerQueueAdd: NodeBound<NodeEvents["playerQueueAdd"]>;
+  playerQueueDedupe: NodeBound<NodeEvents["playerQueueDedupe"]>;
+  playerQueueInsert: NodeBound<NodeEvents["playerQueueInsert"]>;
+  playerQueueMove: NodeBound<NodeEvents["playerQueueMove"]>;
   playerQueueRemove: NodeBound<NodeEvents["playerQueueRemove"]>;
+  playerQueueShuffle: NodeBound<NodeEvents["playerQueueShuffle"]>;
   playerRepeatQueue: NodeBound<NodeEvents["playerRepeatQueue"]>;
   playerRepeatTrack: NodeBound<NodeEvents["playerRepeatTrack"]>;
   playerResume: NodeBound<NodeEvents["playerResume"]>;
+  playerSeek: NodeBound<NodeEvents["playerSeek"]>;
   playerSkip: NodeBound<NodeEvents["playerSkip"]>;
   playerStop: NodeBound<NodeEvents["playerStop"]>;
   playerUpdate: NodeBound<NodeEvents["playerUpdate"]>;
@@ -83,11 +125,40 @@ export interface LunacordEvents extends NodeBoundEvents {
   ws: NodeBound<NodeEvents["ws"]>;
 }
 
+export type LunacordPluginEvent = {
+  [K in keyof LunacordEvents]: { type: K } & LunacordEvents[K];
+}[keyof LunacordEvents];
+
+export interface LunacordPlugin {
+  afterRestResponse?: (
+    context: RestResponseContext & { node: Node }
+  ) => Promise<unknown | void> | unknown | void;
+  beforeRestRequest?: (
+    context: RestRequestContext & { node: Node }
+  ) => Promise<RestRequestPatch | void> | RestRequestPatch | void;
+  name: string;
+  observe?: (event: LunacordPluginEvent) => Promise<void> | void;
+  onRestError?: (context: RestErrorContext & { node: Node }) => Promise<void> | void;
+  transformSearchResult?: (
+    context: {
+      guildId: string;
+      node: Node;
+      player: Player;
+      provider?: SearchProvider;
+      query: string;
+    },
+    result: SearchResult
+  ) => Promise<SearchResult> | SearchResult;
+}
+
 export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   private readonly nodes = new Map<string, Node>();
   private readonly options: LunacordOptions;
+  private readonly plugins: LunacordPlugin[] = [];
   private readonly playerNodes = new Map<string, string>();
   private connectPromise: Promise<void> | null = null;
+  private notifyingPluginError = false;
+  private roundRobinIndex = 0;
 
   constructor(options: LunacordOptions) {
     super();
@@ -99,9 +170,10 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
 
       this.nodes.set(node.id, node);
       this.bindNodeEvents(node);
+      this.refreshNodeSearchTransformers();
 
       queueMicrotask(() => {
-        this.emit("nodeCreate", { node });
+        this.emitObserved("nodeCreate", { node });
       });
     }
 
@@ -145,9 +217,10 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   async connectPlayer(
     guildId: string,
     channelId: string,
-    options?: VoiceConnectOptions
+    options?: VoiceConnectOptions,
+    playerOptions?: CreatePlayerOptions
   ): Promise<Player> {
-    const player = this.createPlayer(guildId);
+    const player = this.createPlayer(guildId, playerOptions);
     await player.connect(channelId, options);
     return player;
   }
@@ -180,13 +253,13 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     await node.disconnectVoice(guildId);
   }
 
-  createPlayer(guildId: string): Player {
+  createPlayer(guildId: string, options?: CreatePlayerOptions): Player {
     const existing = this.getPlayer(guildId);
     if (existing) {
       return existing;
     }
 
-    const node = this.getLeastLoadedNode();
+    const node = this.selectNode(guildId, options);
     if (!node) {
       throw new Error("No connected Lavalink nodes are available");
     }
@@ -197,7 +270,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   }
 
   getLeastLoadedNode(): Node | undefined {
-    const connectedNodes = this.getNodes().filter((node) => node.connected);
+    const connectedNodes = this.getConnectedNodes();
     if (connectedNodes.length === 0) {
       return undefined;
     }
@@ -237,99 +310,143 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     }
   }
 
+  use(plugin: LunacordPlugin): this {
+    this.plugins.push(plugin);
+
+    for (const node of this.getNodes()) {
+      node.rest.use({
+        beforeRequest: plugin.beforeRestRequest
+          ? (context) => plugin.beforeRestRequest?.({ ...context, node })
+          : undefined,
+        afterResponse: plugin.afterRestResponse
+          ? (context) => plugin.afterRestResponse?.({ ...context, node })
+          : undefined,
+        onError: plugin.onRestError
+          ? (context) => plugin.onRestError?.({ ...context, node })
+          : undefined,
+      });
+    }
+
+    this.refreshNodeSearchTransformers();
+    return this;
+  }
+
   private bindNodeEvents(node: Node): void {
+    const emitObserved = <K extends keyof LunacordEvents>(
+      type: K,
+      payload: LunacordEvents[K]
+    ): void => {
+      this.emitObserved(type, payload);
+    };
+
     node.on("playerCreate", (payload) => {
       this.playerNodes.set(payload.guildId, node.id);
-      this.emit("playerCreate", { ...payload, node });
+      emitObserved("playerCreate", { ...payload, node });
     });
     node.on("playerConnect", (payload) => {
-      this.emit("playerConnect", { ...payload, node });
+      emitObserved("playerConnect", { ...payload, node });
     });
     node.on("playerDisconnect", (payload) => {
-      this.emit("playerDisconnect", { ...payload, node });
+      emitObserved("playerDisconnect", { ...payload, node });
     });
     node.on("playerDestroy", (payload) => {
       const { guildId } = payload;
       this.playerNodes.delete(guildId);
-      this.emit("playerDestroy", { ...payload, node });
+      emitObserved("playerDestroy", { ...payload, node });
     });
     node.on("playerPause", (payload) => {
-      this.emit("playerPause", { ...payload, node });
+      emitObserved("playerPause", { ...payload, node });
     });
     node.on("playerFiltersClear", (payload) => {
-      this.emit("playerFiltersClear", { ...payload, node });
+      emitObserved("playerFiltersClear", { ...payload, node });
     });
     node.on("playerFiltersUpdate", (payload) => {
-      this.emit("playerFiltersUpdate", { ...payload, node });
+      emitObserved("playerFiltersUpdate", { ...payload, node });
     });
     node.on("playerPlay", (payload) => {
-      this.emit("playerPlay", { ...payload, node });
+      emitObserved("playerPlay", { ...payload, node });
     });
     node.on("playerQueueAdd", (payload) => {
-      this.emit("playerQueueAdd", { ...payload, node });
+      emitObserved("playerQueueAdd", { ...payload, node });
+    });
+    node.on("playerQueueDedupe", (payload) => {
+      emitObserved("playerQueueDedupe", { ...payload, node });
+    });
+    node.on("playerQueueInsert", (payload) => {
+      emitObserved("playerQueueInsert", { ...payload, node });
+    });
+    node.on("playerQueueMove", (payload) => {
+      emitObserved("playerQueueMove", { ...payload, node });
     });
     node.on("playerQueueRemove", (payload) => {
-      this.emit("playerQueueRemove", { ...payload, node });
+      emitObserved("playerQueueRemove", { ...payload, node });
+    });
+    node.on("playerQueueShuffle", (payload) => {
+      emitObserved("playerQueueShuffle", { ...payload, node });
     });
     node.on("playerResume", (payload) => {
-      this.emit("playerResume", { ...payload, node });
+      emitObserved("playerResume", { ...payload, node });
     });
     node.on("playerRepeatQueue", (payload) => {
-      this.emit("playerRepeatQueue", { ...payload, node });
+      emitObserved("playerRepeatQueue", { ...payload, node });
     });
     node.on("playerRepeatTrack", (payload) => {
-      this.emit("playerRepeatTrack", { ...payload, node });
+      emitObserved("playerRepeatTrack", { ...payload, node });
+    });
+    node.on("playerSeek", (payload) => {
+      emitObserved("playerSeek", { ...payload, node });
     });
     node.on("playerSkip", (payload) => {
-      this.emit("playerSkip", { ...payload, node });
+      emitObserved("playerSkip", { ...payload, node });
     });
     node.on("playerStop", (payload) => {
-      this.emit("playerStop", { ...payload, node });
+      emitObserved("playerStop", { ...payload, node });
     });
     node.on("ready", (payload) => {
-      this.emit("ready", { ...payload, node });
-      this.emit("nodeConnect", { ...payload, node });
+      emitObserved("ready", { ...payload, node });
+      emitObserved("nodeConnect", { ...payload, node });
+      void this.restoreNodePlayers(node);
     });
     node.on("error", (error) => {
       const enriched = new LunacordError(error, node);
-      this.emit("error", enriched);
-      this.emit("nodeError", enriched);
+      emitObserved("error", enriched);
+      emitObserved("nodeError", enriched);
     });
     node.on("playerUpdate", (payload) => {
-      this.emit("playerUpdate", { ...payload, node });
+      emitObserved("playerUpdate", { ...payload, node });
     });
     node.on("stats", (payload) => {
-      this.emit("stats", { ...payload, node });
-      this.emit("nodeStats", { ...payload, node });
+      emitObserved("stats", { ...payload, node });
+      emitObserved("nodeStats", { ...payload, node });
     });
     node.on("playerVolumeUpdate", (payload) => {
-      this.emit("playerVolumeUpdate", { ...payload, node });
+      emitObserved("playerVolumeUpdate", { ...payload, node });
     });
     node.on("trackStart", (payload) => {
-      this.emit("trackStart", { ...payload, node });
+      emitObserved("trackStart", { ...payload, node });
     });
     node.on("trackEnd", (payload) => {
-      this.emit("trackEnd", { ...payload, node });
+      emitObserved("trackEnd", { ...payload, node });
     });
     node.on("trackException", (payload) => {
-      this.emit("trackException", { ...payload, node });
+      emitObserved("trackException", { ...payload, node });
     });
     node.on("trackStuck", (payload) => {
-      this.emit("trackStuck", { ...payload, node });
+      emitObserved("trackStuck", { ...payload, node });
     });
     node.on("voiceSocketClosed", (payload) => {
-      this.emit("voiceSocketClosed", { ...payload, node });
-      this.emit("nodeVoiceSocketClosed", { ...payload, node });
+      emitObserved("voiceSocketClosed", { ...payload, node });
+      emitObserved("nodeVoiceSocketClosed", { ...payload, node });
     });
     node.on("ws", (payload) => {
-      this.emit("ws", { ...payload, node });
+      emitObserved("ws", { ...payload, node });
 
       switch (payload.type) {
         case "nodeDisconnect":
-          this.emit("nodeDisconnect", { ...payload, node });
+          emitObserved("nodeDisconnect", { ...payload, node });
           break;
         case "nodeReconnecting":
-          this.emit("nodeReconnecting", { ...payload, node });
+          emitObserved("nodeReconnecting", { ...payload, node });
           break;
         default:
           break;
@@ -360,6 +477,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       numShards: this.options.numShards,
       password: nodeOptions.password,
       port: nodeOptions.port,
+      regions: nodeOptions.regions,
       requestRetryAttempts: nodeOptions.requestRetryAttempts,
       requestRetryDelayMs: nodeOptions.requestRetryDelayMs,
       requestTimeoutMs: nodeOptions.requestTimeoutMs,
@@ -387,5 +505,224 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   private getNodeForGuild(guildId: string): Node | undefined {
     const nodeId = this.playerNodes.get(guildId);
     return nodeId ? this.nodes.get(nodeId) : undefined;
+  }
+
+  private emitObserved<K extends keyof LunacordEvents>(type: K, payload: LunacordEvents[K]): void {
+    this.emit(type, payload);
+    void this.notifyPlugins({ type, ...payload } as LunacordPluginEvent);
+  }
+
+  private async notifyPlugins(event: LunacordPluginEvent): Promise<void> {
+    for (const plugin of this.plugins) {
+      try {
+        await plugin.observe?.(event);
+      } catch (error) {
+        if (!("node" in event) || !(event.node instanceof Node)) {
+          continue;
+        }
+
+        await this.handlePluginError(event.node, error, plugin.name);
+      }
+    }
+  }
+
+  private async handlePluginError(node: Node, error: unknown, pluginName: string): Promise<void> {
+    if (this.notifyingPluginError) {
+      return;
+    }
+
+    this.notifyingPluginError = true;
+    try {
+      const normalizedError =
+        error instanceof Error ? error : new Error(`Plugin ${pluginName} failed: ${String(error)}`);
+      const enriched = new LunacordError(
+        normalizedError instanceof Error
+          ? normalizedError
+          : new Error(`Plugin ${pluginName} failed`),
+        node
+      );
+
+      this.emit("error", enriched);
+      this.emit("nodeError", enriched);
+    } finally {
+      this.notifyingPluginError = false;
+    }
+  }
+
+  private refreshNodeSearchTransformers(): void {
+    for (const node of this.getNodes()) {
+      node.setSearchResultTransformer(async (context, result) => {
+        let nextResult = result;
+
+        for (const plugin of this.plugins) {
+          const transformed = await plugin.transformSearchResult?.(
+            {
+              ...context,
+              node,
+            },
+            nextResult
+          );
+
+          if (transformed) {
+            nextResult = transformed;
+          }
+        }
+
+        return nextResult;
+      });
+    }
+  }
+
+  private getConnectedNodes(): Node[] {
+    return this.getNodes().filter((node) => node.connected);
+  }
+
+  private selectNode(guildId: string, options?: CreatePlayerOptions): Node | undefined {
+    const connectedNodes = this.getConnectedNodes();
+    if (connectedNodes.length === 0) {
+      return undefined;
+    }
+
+    const preferredNodes = options?.preferredNodeIds
+      ? connectedNodes.filter((node) => options.preferredNodeIds?.includes(node.id))
+      : connectedNodes;
+    const candidateNodes = preferredNodes.length > 0 ? preferredNodes : connectedNodes;
+    const strategy = this.options.nodeSelection ?? { type: "leastLoaded" as const };
+
+    switch (strategy.type) {
+      case "roundRobin":
+        return this.selectRoundRobinNode(candidateNodes);
+      case "weighted":
+        return this.selectWeightedNode(candidateNodes, strategy);
+      case "region":
+        return this.selectRegionNode(guildId, options?.region, candidateNodes, strategy.fallback);
+      case "failover":
+        return this.selectFailoverNode(candidateNodes, strategy.order);
+      case "leastLoaded":
+      default:
+        return this.selectLeastLoadedNode(candidateNodes);
+    }
+  }
+
+  private selectLeastLoadedNode(nodes: readonly Node[]): Node | undefined {
+    if (nodes.length === 0) {
+      return undefined;
+    }
+
+    return nodes.reduce((currentBest, candidate) =>
+      candidate.playerCount < currentBest.playerCount ? candidate : currentBest
+    );
+  }
+
+  private selectRoundRobinNode(nodes: readonly Node[]): Node | undefined {
+    if (nodes.length === 0) {
+      return undefined;
+    }
+
+    const node = nodes[this.roundRobinIndex % nodes.length];
+    this.roundRobinIndex = (this.roundRobinIndex + 1) % Number.MAX_SAFE_INTEGER;
+    return node;
+  }
+
+  private selectWeightedNode(
+    nodes: readonly Node[],
+    strategy: Extract<LunacordNodeSelectionStrategy, { type: "weighted" }>
+  ): Node | undefined {
+    if (nodes.length === 0) {
+      return undefined;
+    }
+
+    const playerWeight = strategy.playerWeight ?? 1;
+    const cpuWeight = strategy.cpuWeight ?? 100;
+    const memoryWeight = strategy.memoryWeight ?? 25;
+
+    return nodes.reduce((bestNode, candidate) => {
+      const bestScore = this.getWeightedNodeScore(bestNode, playerWeight, cpuWeight, memoryWeight);
+      const candidateScore = this.getWeightedNodeScore(
+        candidate,
+        playerWeight,
+        cpuWeight,
+        memoryWeight
+      );
+      return candidateScore < bestScore ? candidate : bestNode;
+    });
+  }
+
+  private getWeightedNodeScore(
+    node: Node,
+    playerWeight: number,
+    cpuWeight: number,
+    memoryWeight: number
+  ): number {
+    const stats = node.latestStats;
+    if (!stats) {
+      return node.playerCount * playerWeight;
+    }
+
+    const memoryRatio = stats.memory.allocated > 0 ? stats.memory.used / stats.memory.allocated : 0;
+
+    return (
+      node.playerCount * playerWeight +
+      stats.cpu.lavalinkLoad * cpuWeight +
+      memoryRatio * memoryWeight
+    );
+  }
+
+  private selectRegionNode(
+    guildId: string,
+    region: string | undefined,
+    nodes: readonly Node[],
+    fallback: "failover" | "leastLoaded" | "roundRobin" | "weighted" | undefined
+  ): Node | undefined {
+    const regionNodes = region
+      ? nodes.filter((node) => node.regions.some((candidate) => candidate === region))
+      : [];
+
+    if (regionNodes.length > 0) {
+      return this.selectLeastLoadedNode(regionNodes);
+    }
+
+    switch (fallback) {
+      case "roundRobin":
+        return this.selectRoundRobinNode(nodes);
+      case "weighted":
+        return this.selectWeightedNode(nodes, { type: "weighted" });
+      case "failover": {
+        const failoverStrategy = this.options.nodeSelection;
+        return failoverStrategy?.type === "failover"
+          ? this.selectFailoverNode(nodes, failoverStrategy.order)
+          : this.selectLeastLoadedNode(nodes);
+      }
+      case "leastLoaded":
+      default:
+        return this.selectLeastLoadedNode(nodes);
+    }
+  }
+
+  private selectFailoverNode(nodes: readonly Node[], order: readonly string[]): Node | undefined {
+    for (const nodeId of order) {
+      const match = nodes.find((node) => node.id === nodeId);
+      if (match) {
+        return match;
+      }
+    }
+
+    return this.selectLeastLoadedNode(nodes);
+  }
+
+  private async restoreNodePlayers(node: Node): Promise<void> {
+    for (const player of node.getPlayers()) {
+      try {
+        await node.restorePlayer(player);
+      } catch (error) {
+        await this.handlePluginError(
+          node,
+          error instanceof Error
+            ? error
+            : new Error(`Failed to restore player ${player.guildId}: ${String(error)}`),
+          "reconnect-recovery"
+        );
+      }
+    }
   }
 }

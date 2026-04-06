@@ -37,11 +37,15 @@ client.on("clientReady", async () => {
         host: "localhost",
         port: 58232,
         password: "youshallnotpass",
+        regions: ["local"],
       },
     ],
     userId: client.user!.id,
     numShards: 1,
     clientName: "LunacordDemo",
+    nodeSelection: {
+      type: "roundRobin",
+    },
     sendGatewayPayload: (guildId, payload) => {
       const guild = client.guilds.cache.get(guildId);
       if (!guild) {
@@ -49,6 +53,15 @@ client.on("clientReady", async () => {
       }
 
       guild.shard.send(payload);
+    },
+  });
+
+  lunacord.use({
+    name: "demo-observer",
+    observe: (event) => {
+      if (event.type === "playerSeek") {
+        console.log(`[Plugin] Seeked guild ${event.guildId} to ${event.position}ms`);
+      }
     },
   });
 
@@ -249,6 +262,39 @@ client.on("messageCreate", async (message) => {
       console.error(error);
       await message.reply("Failed to update filters.");
     }
+  }
+
+  if (command === "!seek") {
+    const player = lunacord.getPlayer(message.guild.id);
+    if (!(player && player.current)) {
+      await message.reply("Nothing is playing.");
+      return;
+    }
+
+    const seconds = Number(args[0]);
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      await message.reply("Usage: `!seek <seconds>`");
+      return;
+    }
+
+    try {
+      await player.seek(seconds * 1000);
+      await message.reply(`Seeked to **${seconds}s**.`);
+    } catch (error) {
+      console.error(error);
+      await message.reply("Failed to seek the current track.");
+    }
+  }
+
+  if (command === "!shuffle") {
+    const player = lunacord.getPlayer(message.guild.id);
+    if (!player) {
+      await message.reply("Nothing is playing.");
+      return;
+    }
+
+    player.shuffleQueue();
+    await message.reply("Shuffled the queue.");
   }
 
   if (command === "!stop") {

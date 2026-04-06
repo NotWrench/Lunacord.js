@@ -156,6 +156,161 @@ describe("Rest", () => {
     });
   });
 
+  describe("metadata endpoints", () => {
+    it("should return node info", async () => {
+      mockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              version: {
+                semver: "4.0.0",
+                major: 4,
+                minor: 0,
+                patch: 0,
+              },
+              buildTime: 1,
+              git: {
+                branch: "main",
+                commit: "abc123",
+                commitTime: 1,
+              },
+              jvm: "17",
+              lavaplayer: "2.0.0",
+              sourceManagers: ["youtube"],
+              filters: ["timescale"],
+              plugins: [],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          )
+        )
+      );
+
+      const result = await rest.getInfo();
+
+      expect(result.version.semver).toBe("4.0.0");
+      expect(result.git.commit).toBe("abc123");
+    });
+
+    it("should return the server version string", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(new Response("4.0.0", { status: 200 }))
+      ) as unknown as typeof fetch;
+
+      await expect(rest.getVersion()).resolves.toBe("4.0.0");
+    });
+
+    it("should return route planner status", async () => {
+      mockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              class: "RotatingIpRoutePlanner",
+              details: {
+                ipBlock: {
+                  type: "Inet4Address",
+                  size: "10",
+                },
+                failingAddresses: [],
+                blockIndex: "1",
+                currentAddressIndex: "2",
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          )
+        )
+      );
+
+      const result = await rest.getRoutePlannerStatus();
+
+      expect(result.class).toBe("RotatingIpRoutePlanner");
+      expect(result.details?.currentAddressIndex).toBe("2");
+    });
+
+    it("should decode tracks in batch", async () => {
+      mockFetch(() =>
+        Promise.resolve(
+          new Response(JSON.stringify([MOCK_TRACK, MOCK_TRACK]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        )
+      );
+
+      const result = await rest.decodeTracks(["one", "two"]);
+
+      expect(result).toHaveLength(2);
+      expect(result[1]?.info.title).toBe("Never Gonna Give You Up");
+    });
+  });
+
+  describe("middleware", () => {
+    it("should let middleware override request data", async () => {
+      const urls: string[] = [];
+      const bodies: string[] = [];
+      rest.use({
+        beforeRequest: () => ({
+          path: "/v4/loadtracks?identifier=ytsearch%3Aoverride",
+          body: ["patched"],
+          method: "POST",
+        }),
+      });
+      globalThis.fetch = mock((url: string | URL, init?: RequestInit) => {
+        urls.push(String(url));
+        bodies.push(String(init?.body ?? ""));
+        return Promise.resolve(
+          new Response(JSON.stringify([MOCK_TRACK]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      await rest.decodeTracks(["original"]);
+
+      expect(urls).toEqual(["http://localhost:2333/v4/loadtracks?identifier=ytsearch%3Aoverride"]);
+      expect(bodies).toEqual(['["patched"]']);
+    });
+
+    it("should let middleware transform response data", async () => {
+      rest.use({
+        afterResponse: () => ({
+          loadType: "empty",
+          data: {},
+        }),
+      });
+      mockFetch(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              loadType: "track",
+              data: MOCK_TRACK,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          )
+        )
+      );
+
+      const result = await rest.loadTracks("ytsearch:test");
+
+      expect(result.loadType).toBe("empty");
+    });
+
+    it("should notify middleware about errors", async () => {
+      const errors: unknown[] = [];
+      rest.use({
+        onError: (context) => {
+          errors.push(context.error);
+        },
+      });
+      globalThis.fetch = mock(() =>
+        Promise.reject(new Error("network down"))
+      ) as unknown as typeof fetch;
+
+      await expect(rest.loadTracks("ytsearch:test")).rejects.toThrow("network down");
+      expect(errors).toHaveLength(1);
+    });
+  });
+
   describe("updatePlayer", () => {
     it("should pass noReplace=true when requested", async () => {
       const urls: string[] = [];

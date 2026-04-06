@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn, vi } from "bu
 import { Lunacord } from "../core/Lunacord.ts";
 import { Node } from "../core/Node.ts";
 import { Track } from "../structures/Track.ts";
-import type { RawTrack } from "../types.ts";
+import { type LoadResult, type RawTrack, SearchProvider } from "../types.ts";
 
 const BASE_OPTIONS = {
   nodes: [
@@ -138,6 +138,103 @@ describe("Lunacord", () => {
 
     expect(player.guildId).toBe("guild-new");
     expect(nodeB!.getPlayer("guild-new")).toBe(player);
+  });
+
+  it("should choose nodes in round-robin order", () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      nodeSelection: {
+        type: "roundRobin",
+      },
+    });
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+
+    const playerA = lunacord.createPlayer("guild-1");
+    const playerB = lunacord.createPlayer("guild-2");
+
+    expect(nodeA!.getPlayer("guild-1")).toBe(playerA);
+    expect(nodeB!.getPlayer("guild-2")).toBe(playerB);
+  });
+
+  it("should choose nodes using weighted strategy", () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      nodeSelection: {
+        type: "weighted",
+      },
+    });
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+    nodeA!.latestStats = {
+      op: "stats",
+      players: 5,
+      playingPlayers: 5,
+      uptime: 1,
+      memory: { free: 1, used: 9, allocated: 10, reservable: 10 },
+      cpu: { cores: 4, systemLoad: 0.8, lavalinkLoad: 0.8 },
+    };
+    nodeB!.latestStats = {
+      op: "stats",
+      players: 1,
+      playingPlayers: 1,
+      uptime: 1,
+      memory: { free: 8, used: 2, allocated: 10, reservable: 10 },
+      cpu: { cores: 4, systemLoad: 0.1, lavalinkLoad: 0.1 },
+    };
+
+    const player = lunacord.createPlayer("guild-weighted");
+
+    expect(nodeB!.getPlayer("guild-weighted")).toBe(player);
+  });
+
+  it("should choose nodes by region when requested", () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      nodes: [
+        {
+          ...BASE_OPTIONS.nodes[0],
+          regions: ["us-east"],
+        },
+        {
+          ...BASE_OPTIONS.nodes[1],
+          regions: ["eu-west"],
+        },
+      ],
+      nodeSelection: {
+        type: "region",
+      },
+    });
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+
+    const player = lunacord.createPlayer("guild-region", { region: "eu-west" });
+
+    expect(nodeB!.getPlayer("guild-region")).toBe(player);
+  });
+
+  it("should choose nodes by failover order", () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      nodeSelection: {
+        type: "failover",
+        order: ["node-b", "node-a"],
+      },
+    });
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+
+    const player = lunacord.createPlayer("guild-failover");
+
+    expect(nodeB!.getPlayer("guild-failover")).toBe(player);
   });
 
   it("should reuse the same player for the same guild", () => {
@@ -535,5 +632,118 @@ describe("Lunacord", () => {
     const result = lunacord.disconnect();
 
     expect(result).toBeUndefined();
+  });
+
+  it("should restore managed players when a node becomes ready again", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
+    node.sessionId = "session-a";
+    const player = lunacord.createPlayer("guild-restore");
+
+    const restoreSpy = mock(() => Promise.resolve());
+    node.restorePlayer = restoreSpy;
+
+    node.emit("ready", createReadyPayload("session-a"));
+    await Promise.resolve();
+
+    expect(restoreSpy).toHaveBeenCalledWith(player);
+  });
+
+  it("should let plugins observe manager events", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
+    const observed: string[] = [];
+
+    lunacord.use({
+      name: "observer",
+      observe: (event) => {
+        observed.push(event.type);
+      },
+    });
+
+    node.emit("ready", createReadyPayload("session-a"));
+    await Promise.resolve();
+
+    expect(observed).toContain("ready");
+    expect(observed).toContain("nodeConnect");
+  });
+
+  it("should let plugins transform player search results", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+    lunacord.use({
+      name: "search-transform",
+      transformSearchResult: (context, result) => {
+        expect(context.provider).toBe(SearchProvider.YouTube);
+        return {
+          ...result,
+          tracks: result.tracks.slice(0, 1),
+        };
+      },
+    });
+
+    const player = lunacord.createPlayer("guild-search");
+    const ownerNode = lunacord.getNode("node-a")!.getPlayer("guild-search")
+      ? lunacord.getNode("node-a")!
+      : lunacord.getNode("node-b")!;
+    ownerNode.rest.search = mock(
+      (): Promise<LoadResult> =>
+        Promise.resolve({
+          loadType: "search",
+          data: [
+            MOCK_RAW_TRACK,
+            {
+              ...MOCK_RAW_TRACK,
+              encoded: "second-track",
+              info: {
+                ...MOCK_RAW_TRACK.info,
+                identifier: "second-track",
+                title: "Second Track",
+              },
+            },
+          ],
+        })
+    );
+
+    const result = await player.search("rick astley", SearchProvider.YouTube);
+
+    expect(result.tracks).toHaveLength(1);
+  });
+
+  it("should let plugins intercept REST requests for managed nodes", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
+    const requests: string[] = [];
+
+    node.sessionId = "session-a";
+    node.rest.use({
+      beforeRequest: (context) => {
+        requests.push(context.path);
+      },
+    });
+
+    lunacord.use({
+      name: "rest-observer",
+      beforeRestRequest: (context) => {
+        requests.push(`${context.node.id}:${context.path}`);
+      },
+    });
+
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ loadType: "empty", data: {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    ) as unknown as typeof fetch;
+
+    await node.rest.loadTracks("ytsearch:test");
+
+    expect(requests).toContain("/v4/loadtracks?identifier=ytsearch%3Atest");
+    expect(requests).toContain("node-a:/v4/loadtracks?identifier=ytsearch%3Atest");
   });
 });

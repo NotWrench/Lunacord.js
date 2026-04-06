@@ -1,5 +1,5 @@
 // tests/player.test.ts
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
 import type { PlayerNodeAdapter } from "../core/Player.ts";
 import { Player } from "../core/Player.ts";
 import { Queue } from "../structures/Queue.ts";
@@ -93,6 +93,7 @@ describe("Player", () => {
   let track2: Track;
 
   beforeEach(() => {
+    vi.useRealTimers();
     mockNode = createMockNode();
     player = new Player("guild-123", mockNode);
     track = new Track(MOCK_RAW_TRACK);
@@ -199,6 +200,45 @@ describe("Player", () => {
 
       expect(player.current).toBeNull();
       expect(mockNode.rest.updatePlayer).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("seek", () => {
+    it("should seek the current track", async () => {
+      player.current = track;
+
+      await player.seek(30_000);
+
+      expect(player.position).toBe(30_000);
+      expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
+        position: 30_000,
+      });
+    });
+
+    it("should clamp seek position for non-stream tracks", async () => {
+      player.current = track;
+
+      await player.seek(track.duration + 10_000);
+
+      expect(player.position).toBe(track.duration);
+    });
+
+    it("should allow large seek positions for streams", async () => {
+      player.current = Track.from({
+        ...MOCK_RAW_TRACK,
+        info: {
+          ...MOCK_RAW_TRACK.info,
+          isStream: true,
+        },
+      });
+
+      await player.seek(999_999);
+
+      expect(player.position).toBe(999_999);
+    });
+
+    it("should throw when there is no current track", async () => {
+      await expect(player.seek(1_000)).rejects.toThrow("Cannot seek without a current track");
     });
   });
 
@@ -618,6 +658,82 @@ describe("Player", () => {
           speed: 1.15,
         },
       });
+    });
+  });
+
+  describe("queue helpers", () => {
+    it("should expose a queue snapshot", () => {
+      player.add(track);
+
+      const snapshot = player.getQueue();
+      snapshot.pop();
+
+      expect(snapshot).toHaveLength(0);
+      expect(player.queue.size).toBe(1);
+    });
+
+    it("should emit events for insert, move, shuffle, and dedupe", () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+      const randomSpy = spyOn(Math, "random");
+      randomSpy.mockReturnValue(0);
+
+      player.add(track);
+      player.insert(1, track2);
+      player.moveQueue(0, 1);
+      player.shuffleQueue();
+      player.insert(3, track);
+      player.removeDuplicateTracks();
+
+      const eventTypes = getMockEvents(emitPlayerEvent)
+        .filter(isEventWithType)
+        .map((event) => event.type);
+
+      expect(eventTypes).toEqual([
+        "playerQueueAdd",
+        "playerQueueInsert",
+        "playerQueueMove",
+        "playerQueueShuffle",
+        "playerQueueInsert",
+        "playerQueueDedupe",
+      ]);
+    });
+  });
+
+  describe("estimated position", () => {
+    it("should interpolate playback position while playing", () => {
+      player.current = track;
+      player.connected = true;
+      player.paused = false;
+      const nowSpy = spyOn(Date, "now");
+      nowSpy.mockReturnValue(1_000_000);
+      player.applyState({
+        time: 1_000_000,
+        position: 5_000,
+        connected: true,
+        ping: 42,
+      });
+      nowSpy.mockReturnValue(1_002_000);
+
+      expect(player.getEstimatedPosition()).toBe(7_000);
+      expect(player.ping).toBe(42);
+    });
+
+    it("should not advance while paused", () => {
+      player.current = track;
+      player.connected = true;
+      player.paused = true;
+      const nowSpy = spyOn(Date, "now");
+      nowSpy.mockReturnValue(1_000_000);
+      player.applyState({
+        time: 1_000_000,
+        position: 5_000,
+        connected: true,
+        ping: 42,
+      });
+      nowSpy.mockReturnValue(1_002_000);
+
+      expect(player.getEstimatedPosition()).toBe(5_000);
     });
   });
 

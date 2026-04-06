@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn, vi } from "bun:test";
 import { Queue } from "../structures/Queue.ts";
 import { Track } from "../structures/Track.ts";
 import type { RawTrack } from "../types.ts";
@@ -38,6 +38,10 @@ const MOCK_RAW_TRACK_2: RawTrack = {
 };
 
 describe("Queue", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("should enqueue, peek, and dequeue tracks", () => {
     const queue = new Queue();
     const track = Track.from(MOCK_RAW_TRACK);
@@ -104,5 +108,121 @@ describe("Queue", () => {
 
     expect(() => queue.enqueueMany(tracks)).not.toThrow();
     expect(queue.size).toBe(20_000);
+  });
+
+  it("should insert tracks at a bounded index", () => {
+    const queue = new Queue();
+    const track1 = Track.from(MOCK_RAW_TRACK);
+    const track2 = Track.from(MOCK_RAW_TRACK_2);
+
+    queue.enqueue(track1);
+    queue.insert(99, track2);
+
+    expect(queue.toArray().map((track) => track.encoded)).toEqual(["track-1", "track-2"]);
+  });
+
+  it("should move tracks inside the queue", () => {
+    const queue = new Queue();
+    queue.enqueueMany([
+      Track.from(MOCK_RAW_TRACK),
+      Track.from(MOCK_RAW_TRACK_2),
+      Track.from({
+        ...MOCK_RAW_TRACK,
+        encoded: "track-3",
+        info: {
+          ...MOCK_RAW_TRACK.info,
+          identifier: "id-3",
+          title: "Track 3",
+        },
+      }),
+    ]);
+
+    queue.move(0, 2);
+
+    expect(queue.toArray().map((track) => track.encoded)).toEqual([
+      "track-2",
+      "track-3",
+      "track-1",
+    ]);
+  });
+
+  it("should shuffle while preserving membership", () => {
+    const randomSpy = spyOn(Math, "random");
+    randomSpy.mockReturnValue(0);
+
+    const queue = new Queue();
+    queue.enqueueMany([
+      Track.from(MOCK_RAW_TRACK),
+      Track.from(MOCK_RAW_TRACK_2),
+      Track.from({
+        ...MOCK_RAW_TRACK,
+        encoded: "track-3",
+        info: {
+          ...MOCK_RAW_TRACK.info,
+          identifier: "id-3",
+          title: "Track 3",
+        },
+      }),
+    ]);
+
+    queue.shuffle();
+
+    expect(queue.toArray().map((track) => track.encoded)).toEqual([
+      "track-2",
+      "track-3",
+      "track-1",
+    ]);
+  });
+
+  it("should remove duplicates by encoded track", () => {
+    const queue = new Queue();
+    queue.enqueueMany([
+      Track.from(MOCK_RAW_TRACK),
+      Track.from(MOCK_RAW_TRACK_2),
+      Track.from(MOCK_RAW_TRACK),
+    ]);
+
+    const removed = queue.removeDuplicates();
+
+    expect(removed).toBe(1);
+    expect(queue.toArray().map((track) => track.encoded)).toEqual(["track-1", "track-2"]);
+  });
+
+  it("should remove duplicates by uri with encoded fallback", () => {
+    const queue = new Queue();
+    queue.enqueueMany([
+      Track.from({
+        ...MOCK_RAW_TRACK,
+        encoded: "track-a",
+        info: {
+          ...MOCK_RAW_TRACK.info,
+          identifier: "id-a",
+          uri: "https://example.com/song",
+        },
+      }),
+      Track.from({
+        ...MOCK_RAW_TRACK_2,
+        encoded: "track-b",
+        info: {
+          ...MOCK_RAW_TRACK_2.info,
+          identifier: "id-b",
+          uri: "https://example.com/song",
+        },
+      }),
+      Track.from({
+        ...MOCK_RAW_TRACK_2,
+        encoded: "track-c",
+        info: {
+          ...MOCK_RAW_TRACK_2.info,
+          identifier: "id-c",
+          uri: null,
+        },
+      }),
+    ]);
+
+    const removed = queue.removeDuplicates({ by: "uri" });
+
+    expect(removed).toBe(1);
+    expect(queue.toArray().map((track) => track.encoded)).toEqual(["track-a", "track-c"]);
   });
 });
