@@ -1,10 +1,10 @@
 import { TypedEventEmitter } from "../utils/EventEmitter.ts";
 import {
+  type GatewayVoiceStatePayload,
   Node,
   type NodeEvents,
   type NodeOptions,
   type VoiceConnectOptions,
-  type VoiceStateUpdateRequest,
 } from "./Node.ts";
 import type { Player } from "./Player.ts";
 
@@ -21,7 +21,7 @@ export interface LavacordOptions {
   nodes: readonly LavacordNodeOptions[];
   numShards: number;
   resume?: boolean;
-  setVoiceState?: (payload: VoiceStateUpdateRequest) => void | Promise<void>;
+  sendGatewayPayload?: (guildId: string, payload: GatewayVoiceStatePayload) => void | Promise<void>;
   timeout?: number;
   userId: string;
 }
@@ -78,16 +78,19 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
       return;
     }
 
-    const setVoiceState = this.options.setVoiceState;
-    if (!setVoiceState) {
-      throw new Error("Lavacord was not configured with setVoiceState");
+    const sendGatewayPayload = this.options.sendGatewayPayload;
+    if (!sendGatewayPayload) {
+      throw new Error("Lavacord was not configured with sendGatewayPayload");
     }
 
-    await setVoiceState({
-      channelId,
-      guildId,
-      selfDeaf: options?.selfDeaf ?? true,
-      selfMute: options?.selfMute ?? false,
+    await sendGatewayPayload(guildId, {
+      op: 4,
+      d: {
+        guild_id: guildId,
+        channel_id: channelId,
+        self_mute: options?.selfMute ?? false,
+        self_deaf: options?.selfDeaf ?? true,
+      },
     });
   }
 
@@ -237,7 +240,7 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
       password: nodeOptions.password,
       port: nodeOptions.port,
       resume: this.options.resume,
-      setVoiceState: this.options.setVoiceState,
+      sendGatewayPayload: this.options.sendGatewayPayload,
       timeout: this.options.timeout,
       userId: this.options.userId,
     };

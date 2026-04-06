@@ -34,16 +34,19 @@ export interface NodeOptions {
   password: string;
   port: number;
   resume?: boolean;
-  setVoiceState?: (payload: VoiceStateUpdateRequest) => void | Promise<void>;
+  sendGatewayPayload?: (guildId: string, payload: GatewayVoiceStatePayload) => void | Promise<void>;
   timeout?: number;
   userId: string;
 }
 
-export interface VoiceStateUpdateRequest {
-  channelId: string | null;
-  guildId: string;
-  selfDeaf: boolean;
-  selfMute: boolean;
+export interface GatewayVoiceStatePayload {
+  d: {
+    channel_id: string | null;
+    guild_id: string;
+    self_deaf: boolean;
+    self_mute: boolean;
+  };
+  op: 4;
 }
 
 export interface VoiceConnectOptions {
@@ -259,9 +262,8 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     channelId: string,
     options?: VoiceConnectOptions
   ): Promise<void> {
-    const setVoiceState = this.options.setVoiceState;
-    if (!setVoiceState) {
-      throw new Error("Node was not configured with setVoiceState");
+    if (!this.options.sendGatewayPayload) {
+      throw new Error("Node was not configured with sendGatewayPayload");
     }
 
     this.voiceStates.delete(guildId);
@@ -269,9 +271,8 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     this.syncedVoiceStateKeys.delete(guildId);
 
     const connectOptions = { ...DEFAULT_VOICE_CONNECT_OPTIONS, ...options };
-    await setVoiceState({
+    await this.sendVoiceStateUpdate(guildId, {
       channelId,
-      guildId,
       selfDeaf: connectOptions.selfDeaf,
       selfMute: connectOptions.selfMute,
     });
@@ -287,11 +288,9 @@ export class Node extends TypedEventEmitter<NodeEvents> {
   }
 
   async disconnectVoice(guildId: string): Promise<void> {
-    const setVoiceState = this.options.setVoiceState;
-    if (setVoiceState) {
-      await setVoiceState({
+    if (this.options.sendGatewayPayload) {
+      await this.sendVoiceStateUpdate(guildId, {
         channelId: null,
-        guildId,
         selfDeaf: false,
         selfMute: false,
       });
@@ -353,6 +352,30 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
     this.socket.on("close", ({ code, reason }) => {
       this.emit("error", new Error(`WebSocket closed: ${code} ${reason}`));
+    });
+  }
+
+  private async sendVoiceStateUpdate(
+    guildId: string,
+    payload: {
+      channelId: string | null;
+      selfDeaf: boolean;
+      selfMute: boolean;
+    }
+  ): Promise<void> {
+    const sendGatewayPayload = this.options.sendGatewayPayload;
+    if (!sendGatewayPayload) {
+      return;
+    }
+
+    await sendGatewayPayload(guildId, {
+      op: 4,
+      d: {
+        guild_id: guildId,
+        channel_id: payload.channelId,
+        self_mute: payload.selfMute,
+        self_deaf: payload.selfDeaf,
+      },
     });
   }
 

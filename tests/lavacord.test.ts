@@ -208,27 +208,30 @@ describe("Lavacord", () => {
   });
 
   it("should call the shared voice callback for connectVoice", async () => {
-    const setVoiceState = mock(() => Promise.resolve());
+    const sendGatewayPayload = mock(() => Promise.resolve());
     const lavacord = new Lavacord({
       ...BASE_OPTIONS,
-      setVoiceState,
+      sendGatewayPayload,
     });
 
     await lavacord.connectVoice("guild-123", "channel-123");
 
-    expect(setVoiceState).toHaveBeenCalledWith({
-      channelId: "channel-123",
-      guildId: "guild-123",
-      selfDeaf: true,
-      selfMute: false,
+    expect(sendGatewayPayload).toHaveBeenCalledWith("guild-123", {
+      op: 4,
+      d: {
+        guild_id: "guild-123",
+        channel_id: "channel-123",
+        self_mute: false,
+        self_deaf: true,
+      },
     });
   });
 
   it("should connect a player to voice with connectPlayer", async () => {
-    const setVoiceState = mock(() => Promise.resolve());
+    const sendGatewayPayload = mock(() => Promise.resolve());
     const lavacord = new Lavacord({
       ...BASE_OPTIONS,
-      setVoiceState,
+      sendGatewayPayload,
     });
     const [nodeA, nodeB] = lavacord.getNodes();
 
@@ -239,19 +242,22 @@ describe("Lavacord", () => {
 
     expect(player.guildId).toBe("guild-123");
     expect(lavacord.isPlayerConnected("guild-123")).toBe(true);
-    expect(setVoiceState).toHaveBeenCalledWith({
-      channelId: "channel-123",
-      guildId: "guild-123",
-      selfDeaf: true,
-      selfMute: false,
+    expect(sendGatewayPayload).toHaveBeenCalledWith("guild-123", {
+      op: 4,
+      d: {
+        guild_id: "guild-123",
+        channel_id: "channel-123",
+        self_mute: false,
+        self_deaf: true,
+      },
     });
   });
 
   it("should route disconnectVoice through the owning node", async () => {
-    const setVoiceState = mock(() => Promise.resolve());
+    const sendGatewayPayload = mock(() => Promise.resolve());
     const lavacord = new Lavacord({
       ...BASE_OPTIONS,
-      setVoiceState,
+      sendGatewayPayload,
     });
     const [nodeA, nodeB] = lavacord.getNodes();
 
@@ -261,11 +267,14 @@ describe("Lavacord", () => {
     lavacord.createPlayer("guild-123");
     await lavacord.disconnectVoice("guild-123");
 
-    expect(setVoiceState).toHaveBeenCalledWith({
-      channelId: null,
-      guildId: "guild-123",
-      selfDeaf: false,
-      selfMute: false,
+    expect(sendGatewayPayload).toHaveBeenCalledWith("guild-123", {
+      op: 4,
+      d: {
+        guild_id: "guild-123",
+        channel_id: null,
+        self_mute: false,
+        self_deaf: false,
+      },
     });
   });
 });

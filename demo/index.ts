@@ -42,21 +42,13 @@ client.on("clientReady", async () => {
     userId: client.user!.id,
     numShards: 1,
     clientName: "LunacordDemo",
-    setVoiceState: ({ guildId, channelId, selfMute, selfDeaf }) => {
+    sendGatewayPayload: (guildId, payload) => {
       const guild = client.guilds.cache.get(guildId);
       if (!guild) {
         return;
       }
 
-      guild.shard.send({
-        op: 4,
-        d: {
-          guild_id: guildId,
-          channel_id: channelId,
-          self_mute: selfMute,
-          self_deaf: selfDeaf,
-        },
-      });
+      guild.shard.send(payload);
     },
   });
 

@@ -192,37 +192,43 @@ describe("Node", () => {
     });
 
     it("should send a gateway disconnect when disconnectVoice is called", async () => {
-      const setVoiceState = mock(() => Promise.resolve());
+      const sendGatewayPayload = mock(() => Promise.resolve());
       const nodeWithVoiceAdapter = new Node({
         ...NODE_OPTIONS,
-        setVoiceState,
+        sendGatewayPayload,
       });
 
       await nodeWithVoiceAdapter.disconnectVoice("guild-123");
 
-      expect(setVoiceState).toHaveBeenCalledWith({
-        channelId: null,
-        guildId: "guild-123",
-        selfDeaf: false,
-        selfMute: false,
+      expect(sendGatewayPayload).toHaveBeenCalledWith("guild-123", {
+        op: 4,
+        d: {
+          guild_id: "guild-123",
+          channel_id: null,
+          self_mute: false,
+          self_deaf: false,
+        },
       });
     });
 
     it("should send a gateway voice connect when connectVoice is called", async () => {
-      const setVoiceState = mock(() => Promise.resolve());
+      const sendGatewayPayload = mock(() => Promise.resolve());
       const nodeWithVoiceAdapter = new Node({
         ...NODE_OPTIONS,
-        setVoiceState,
+        sendGatewayPayload,
       });
       const player = nodeWithVoiceAdapter.createPlayer("guild-789");
 
       await nodeWithVoiceAdapter.connectVoice("guild-789", "channel-789");
 
-      expect(setVoiceState).toHaveBeenCalledWith({
-        channelId: "channel-789",
-        guildId: "guild-789",
-        selfDeaf: true,
-        selfMute: false,
+      expect(sendGatewayPayload).toHaveBeenCalledWith("guild-789", {
+        op: 4,
+        d: {
+          guild_id: "guild-789",
+          channel_id: "channel-789",
+          self_mute: false,
+          self_deaf: true,
+        },
       });
       expect(player.isConnected).toBe(true);
     });
