@@ -72,6 +72,7 @@ const getMockEvents = (fn: ReturnType<typeof mock>): unknown[] =>
 interface PlayerSkipEvent {
   guildId: string;
   nextTrack: Track | null;
+  reason: "manual" | "repeatQueue" | "repeatTrack";
   skippedTrack: Track | null;
   type: "playerSkip";
 }
@@ -307,7 +308,62 @@ describe("Player", () => {
         guildId: "guild-123",
         skippedTrack: track,
         nextTrack: track2,
+        reason: "manual",
       });
+    });
+
+    it("should replay the same track on skip when repeatTrack is enabled", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      player.current = track;
+      player.add(track2);
+      player.repeatTrack(true);
+
+      await player.skip();
+
+      expect(player.current?.encoded).toBe(track.encoded);
+      expect(player.queue.size).toBe(1);
+      expect(player.queue.peek()?.encoded).toBe(track2.encoded);
+
+      const skipEvent = getMockEvents(emitPlayerEvent).find(isPlayerSkipEvent);
+      expect(skipEvent?.reason).toBe("repeatTrack");
+    });
+
+    it("should continue queue loop on skip when repeatQueue is enabled and queue is empty", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      player.current = track;
+      player.repeatQueue(true);
+
+      await player.skip();
+
+      expect(player.current?.encoded).toBe(track.encoded);
+      expect(player.queue.isEmpty).toBe(true);
+
+      const skipEvent = getMockEvents(emitPlayerEvent).find(isPlayerSkipEvent);
+      expect(skipEvent?.reason).toBe("repeatQueue");
+      expect(skipEvent?.nextTrack?.encoded).toBe(track.encoded);
+    });
+
+    it("should skip to next track and rotate queue when repeatQueue is enabled", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      player.current = track;
+      player.add(track2);
+      player.repeatQueue(true);
+
+      await player.skip();
+
+      expect(player.current?.encoded).toBe(track2.encoded);
+      expect(player.queue.size).toBe(1);
+      expect(player.queue.peek()?.encoded).toBe(track.encoded);
+
+      const skipEvent = getMockEvents(emitPlayerEvent).find(isPlayerSkipEvent);
+      expect(skipEvent?.reason).toBe("repeatQueue");
+      expect(skipEvent?.nextTrack?.encoded).toBe(track2.encoded);
     });
   });
 

@@ -331,6 +331,7 @@ describe("Lavacord", () => {
       guildId: "guild-123",
       skippedTrack: track,
       nextTrack: null,
+      reason: "manual",
     });
     node.emit("playerStop", {
       guildId: "guild-123",

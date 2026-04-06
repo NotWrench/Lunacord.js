@@ -76,6 +76,7 @@ export type PlayerActionEvent =
       type: "playerSkip";
       guildId: string;
       nextTrack: Track | null;
+      reason: "manual" | "repeatQueue" | "repeatTrack";
       skippedTrack: Track | null;
     }
   | {
@@ -332,6 +333,36 @@ export class Player {
 
   async skip(): Promise<void> {
     const skippedTrack = this.current;
+
+    if (!skippedTrack) {
+      this.emitActionEvent({
+        type: "playerSkip",
+        guildId: this.guildId,
+        skippedTrack: null,
+        nextTrack: null,
+        reason: "manual",
+      });
+      return;
+    }
+
+    if (this.repeatTrackEnabled) {
+      await this.stop(false, false);
+      await this.play(skippedTrack);
+
+      this.emitActionEvent({
+        type: "playerSkip",
+        guildId: this.guildId,
+        skippedTrack,
+        nextTrack: this.current,
+        reason: "repeatTrack",
+      });
+      return;
+    }
+
+    if (this.repeatQueueEnabled) {
+      this.add(skippedTrack);
+    }
+
     await this.stop(false, false);
 
     let nextTrack: Track | null = null;
@@ -345,6 +376,7 @@ export class Player {
       guildId: this.guildId,
       skippedTrack,
       nextTrack,
+      reason: this.repeatQueueEnabled ? "repeatQueue" : "manual",
     });
   }
 

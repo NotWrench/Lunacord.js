@@ -160,7 +160,25 @@ client.on("messageCreate", async (message) => {
       await message.reply("Nothing is playing.");
       return;
     }
+
+    const repeatTrackEnabled = player.isRepeatTrackEnabled;
+    const repeatQueueEnabled = player.isRepeatQueueEnabled;
+    const hadQueuedTrack = !player.queue.isEmpty;
+
     await player.skip();
+
+    if (repeatTrackEnabled) {
+      await message.reply("Track repeat is enabled, so skip replayed the same track.");
+      return;
+    }
+
+    if (repeatQueueEnabled && !hadQueuedTrack) {
+      await message.reply(
+        "Queue repeat is enabled and this was the last track, so playback continued from the loop."
+      );
+      return;
+    }
+
     await message.reply("Skipped!");
   }
 

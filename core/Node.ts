@@ -443,6 +443,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
           guildId: event.guildId,
           skippedTrack: event.skippedTrack,
           nextTrack: event.nextTrack,
+          reason: event.reason,
         });
         return;
       case "playerStop":
