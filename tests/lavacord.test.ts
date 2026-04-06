@@ -44,6 +44,19 @@ describe("Lavacord", () => {
     expect(lavacord.getNode("node-b")?.id).toBe("node-b");
   });
 
+  it("should emit nodeCreate for managed nodes", async () => {
+    const createdNodeIds: string[] = [];
+    const lavacord = new Lavacord(BASE_OPTIONS);
+
+    lavacord.on("nodeCreate", ({ node }) => {
+      createdNodeIds.push(node.id);
+    });
+
+    await Promise.resolve();
+
+    expect(createdNodeIds.sort()).toEqual(["node-a", "node-b"]);
+  });
+
   it("should connect all nodes explicitly", async () => {
     const lavacord = new Lavacord(BASE_OPTIONS);
 
@@ -150,12 +163,40 @@ describe("Lavacord", () => {
     expect(readyEvents).toEqual(["node-a"]);
   });
 
+  it("should re-emit nodeConnect with node context", () => {
+    const lavacord = new Lavacord(BASE_OPTIONS);
+    const node = lavacord.getNode("node-a")!;
+    const events: string[] = [];
+
+    lavacord.on("nodeConnect", ({ node: sourceNode, sessionId }) => {
+      events.push(`${sourceNode.id}:${sessionId}`);
+    });
+
+    node.emit("ready", createReadyPayload("session-a"));
+
+    expect(events).toEqual(["node-a:session-a"]);
+  });
+
   it("should re-emit node errors with node context", () => {
     const lavacord = new Lavacord(BASE_OPTIONS);
     const node = lavacord.getNode("node-a")!;
     const errors: string[] = [];
 
     lavacord.on("error", (error) => {
+      errors.push(`${error.node.id}:${error.message}`);
+    });
+
+    node.emit("error", new Error("node failed"));
+
+    expect(errors).toEqual(["node-a:node failed"]);
+  });
+
+  it("should re-emit nodeError with node context", () => {
+    const lavacord = new Lavacord(BASE_OPTIONS);
+    const node = lavacord.getNode("node-a")!;
+    const errors: string[] = [];
+
+    lavacord.on("nodeError", (error) => {
       errors.push(`${error.node.id}:${error.message}`);
     });
 
@@ -196,6 +237,25 @@ describe("Lavacord", () => {
     });
 
     expect(events).toEqual(["node-a:1:1000"]);
+  });
+
+  it("should re-emit nodeVoiceSocketClosed with node context", () => {
+    const lavacord = new Lavacord(BASE_OPTIONS);
+    const node = lavacord.getNode("node-a")!;
+    const events: string[] = [];
+
+    lavacord.on("nodeVoiceSocketClosed", (event) => {
+      events.push(`${event.node.id}:${event.guildId}:${event.code}:${event.reason}`);
+    });
+
+    node.emit("voiceSocketClosed", {
+      guildId: "guild-123",
+      code: 1000,
+      reason: "Closed",
+      byRemote: true,
+    });
+
+    expect(events).toEqual(["node-a:guild-123:1000:Closed"]);
   });
 
   it("should route voice packets to the owning node", () => {

@@ -264,18 +264,20 @@ describe("Node", () => {
       expect(player.isConnected).toBe(true);
     });
 
-    it("should emit voiceSocketClosed ws events and not emit error for WebSocketClosedEvent", () => {
+    it("should emit voiceSocketClosed events and not emit error for WebSocketClosedEvent", () => {
       const player = node.createPlayer("guild-123");
       player.connected = true;
+      const voiceEvents: string[] = [];
       const wsEvents: string[] = [];
       const errors: Error[] = [];
 
+      node.on("voiceSocketClosed", (event) => {
+        voiceEvents.push(
+          `${event.guildId}:${event.code}:${event.reason}:${event.byRemote ? "remote" : "local"}`
+        );
+      });
       node.on("ws", (event) => {
-        if (event.type === "voiceSocketClosed") {
-          wsEvents.push(
-            `${event.guildId}:${event.code}:${event.reason}:${event.byRemote ? "remote" : "local"}`
-          );
-        }
+        wsEvents.push(event.type);
       });
       node.on("error", (error) => {
         errors.push(error);
@@ -300,10 +302,11 @@ describe("Node", () => {
       });
 
       expect(player.isConnected).toBe(false);
-      expect(wsEvents).toEqual([
+      expect(voiceEvents).toEqual([
         "guild-123:4014:Disconnected:remote",
         "guild-999:1000:No player:local",
       ]);
+      expect(wsEvents).toHaveLength(0);
       expect(errors).toHaveLength(0);
     });
 

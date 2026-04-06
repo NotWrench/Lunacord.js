@@ -52,7 +52,8 @@ client.on("clientReady", async () => {
     },
   });
 
-  lavacord.on("ready", ({ node }) => console.log(`[Lavalink] Node connected: ${node.id}`));
+  lavacord.on("nodeCreate", ({ node }) => console.log(`[Lavalink] Node created: ${node.id}`));
+  lavacord.on("nodeConnect", ({ node }) => console.log(`[Lavalink] Node connected: ${node.id}`));
   lavacord.on("trackStart", ({ track }) => console.log(`[Lavalink] Playing: ${track.title}`));
   lavacord.on("trackEnd", ({ track, reason }) =>
     console.log(`[Lavalink] Track ended: ${track.title} (${reason})`)
@@ -77,17 +78,19 @@ client.on("clientReady", async () => {
           `[Lavalink] Node ${event.node.id} disconnected (${event.code} ${event.reason})`
         );
         break;
-      case "voiceSocketClosed": {
-        const source = event.byRemote ? "remote" : "local";
-        console.warn(
-          `[Lavalink] Voice websocket closed (${source}) for guild ${event.guildId} on ${event.node.id}: ${event.code} ${event.reason}`
-        );
-        break;
-      }
       default:
         break;
     }
   });
+  lavacord.on("nodeVoiceSocketClosed", (event) => {
+    const source = event.byRemote ? "remote" : "local";
+    console.warn(
+      `[Lavalink] Voice websocket closed (${source}) for guild ${event.guildId} on ${event.node.id}: ${event.code} ${event.reason}`
+    );
+  });
+  lavacord.on("nodeError", (error) =>
+    console.error(`[Lavalink] Node error (${error.node.id}):`, error.message)
+  );
   lavacord.on("error", (err) => console.error("[Lavalink] Error:", err.message));
 
   try {

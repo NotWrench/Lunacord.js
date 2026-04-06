@@ -24,14 +24,14 @@ export type NodeWsEvent =
       type: "nodeReconnecting";
       attempt: number;
       delay: number;
-    }
-  | {
-      type: "voiceSocketClosed";
-      guildId: string;
-      code: number;
-      reason: string;
-      byRemote: boolean;
     };
+
+export interface VoiceSocketClosedEvent {
+  byRemote: boolean;
+  code: number;
+  guildId: string;
+  reason: string;
+}
 
 export interface NodeEvents {
   error: Error;
@@ -43,6 +43,7 @@ export interface NodeEvents {
   trackException: { player: Player; track: Track; exception: Exception };
   trackStart: { player: Player; track: Track };
   trackStuck: { player: Player; track: Track; thresholdMs: number };
+  voiceSocketClosed: VoiceSocketClosedEvent;
   ws: NodeWsEvent;
 }
 
@@ -418,8 +419,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
         player.connected = false;
       }
 
-      this.emit("ws", {
-        type: "voiceSocketClosed",
+      this.emit("voiceSocketClosed", {
         guildId: event.guildId,
         code: event.code,
         reason: event.reason,

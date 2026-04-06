@@ -29,7 +29,14 @@ export interface LavacordOptions {
 type NodeBound<T> = T & { node: Node };
 type NodeBoundEvents = { [K in keyof NodeEvents]: NodeBound<NodeEvents[K]> };
 
-export interface LavacordEvents extends NodeBoundEvents {}
+export interface LavacordEvents extends NodeBoundEvents {
+  nodeConnect: NodeBound<NodeEvents["ready"]>;
+  nodeCreate: { node: Node };
+  nodeDisconnect: NodeBound<Extract<NodeEvents["ws"], { type: "nodeDisconnect" }>>;
+  nodeError: NodeBound<NodeEvents["error"]>;
+  nodeReconnecting: NodeBound<Extract<NodeEvents["ws"], { type: "nodeReconnecting" }>>;
+  nodeVoiceSocketClosed: NodeBound<NodeEvents["voiceSocketClosed"]>;
+}
 
 export class Lavacord extends TypedEventEmitter<LavacordEvents> {
   private readonly nodes = new Map<string, Node>();
@@ -47,6 +54,10 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
 
       this.nodes.set(node.id, node);
       this.bindNodeEvents(node);
+
+      queueMicrotask(() => {
+        this.emit("nodeCreate", { node });
+      });
     }
 
     if (options.autoConnect) {
@@ -189,9 +200,11 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
     });
     node.on("ready", (payload) => {
       this.emit("ready", { ...payload, node });
+      this.emit("nodeConnect", { ...payload, node });
     });
     node.on("error", (error) => {
       this.emit("error", Object.assign(error, { node }));
+      this.emit("nodeError", Object.assign(error, { node }));
     });
     node.on("playerUpdate", (payload) => {
       this.emit("playerUpdate", { ...payload, node });
@@ -211,8 +224,23 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
     node.on("trackStuck", (payload) => {
       this.emit("trackStuck", { ...payload, node });
     });
+    node.on("voiceSocketClosed", (payload) => {
+      this.emit("voiceSocketClosed", { ...payload, node });
+      this.emit("nodeVoiceSocketClosed", { ...payload, node });
+    });
     node.on("ws", (payload) => {
       this.emit("ws", { ...payload, node });
+
+      switch (payload.type) {
+        case "nodeDisconnect":
+          this.emit("nodeDisconnect", { ...payload, node });
+          break;
+        case "nodeReconnecting":
+          this.emit("nodeReconnecting", { ...payload, node });
+          break;
+        default:
+          break;
+      }
     });
   }
 
