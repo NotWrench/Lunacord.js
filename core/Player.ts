@@ -561,11 +561,11 @@ export class Player {
       return 0;
     }
 
-    if (this.paused || !this.connected || this.lastStateTime === 0) {
+    if (this.paused || !this.connected || this.lastUpdateAt === 0) {
       return clampPosition(this.position, this.current);
     }
 
-    const elapsed = Math.max(0, Date.now() - this.lastStateTime);
+    const elapsed = Math.max(0, Date.now() - this.lastUpdateAt);
     return clampPosition(this.position + elapsed, this.current);
   }
 

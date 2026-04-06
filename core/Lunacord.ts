@@ -58,7 +58,14 @@ export type LunacordNodeSelectionStrategy =
       type: "weighted";
     }
   | {
-      fallback?: "failover" | "leastLoaded" | "roundRobin" | "weighted";
+      fallback?:
+        | "leastLoaded"
+        | "roundRobin"
+        | "weighted"
+        | {
+            order: readonly string[];
+            type: "failover";
+          };
       type: "region";
     }
   | {
@@ -405,7 +412,9 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     node.on("ready", (payload) => {
       emitObserved("ready", { ...payload, node });
       emitObserved("nodeConnect", { ...payload, node });
-      void this.restoreNodePlayers(node);
+      if (!payload.resumed) {
+        void this.restoreNodePlayers(node);
+      }
     });
     node.on("error", (error) => {
       const enriched = new LunacordError(error, node);
@@ -669,10 +678,18 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   }
 
   private selectRegionNode(
-    guildId: string,
+    _guildId: string,
     region: string | undefined,
     nodes: readonly Node[],
-    fallback: "failover" | "leastLoaded" | "roundRobin" | "weighted" | undefined
+    fallback:
+      | "leastLoaded"
+      | "roundRobin"
+      | "weighted"
+      | {
+          order: readonly string[];
+          type: "failover";
+        }
+      | undefined
   ): Node | undefined {
     const regionNodes = region
       ? nodes.filter((node) => node.regions.some((candidate) => candidate === region))
@@ -687,14 +704,12 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
         return this.selectRoundRobinNode(nodes);
       case "weighted":
         return this.selectWeightedNode(nodes, { type: "weighted" });
-      case "failover": {
-        const failoverStrategy = this.options.nodeSelection;
-        return failoverStrategy?.type === "failover"
-          ? this.selectFailoverNode(nodes, failoverStrategy.order)
-          : this.selectLeastLoadedNode(nodes);
-      }
+      case undefined:
       case "leastLoaded":
       default:
+        if (typeof fallback === "object" && fallback.type === "failover") {
+          return this.selectFailoverNode(nodes, fallback.order);
+        }
         return this.selectLeastLoadedNode(nodes);
     }
   }

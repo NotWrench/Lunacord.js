@@ -199,6 +199,17 @@ describe("Rest", () => {
       await expect(rest.getVersion()).resolves.toBe("4.0.0");
     });
 
+    it("should let middleware transform text responses", async () => {
+      rest.use({
+        afterResponse: () => "5.0.0",
+      });
+      globalThis.fetch = mock(() =>
+        Promise.resolve(new Response("4.0.0", { status: 200 }))
+      ) as unknown as typeof fetch;
+
+      await expect(rest.getVersion()).resolves.toBe("5.0.0");
+    });
+
     it("should return route planner status", async () => {
       mockFetch(() =>
         Promise.resolve(

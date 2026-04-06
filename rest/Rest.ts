@@ -153,8 +153,8 @@ export class Rest {
   }
 
   private async requestText(method: string, path: string): Promise<string> {
-    const { response } = await this.sendRequest(method, path);
-    return response.text();
+    const { request, response } = await this.sendRequest(method, path);
+    return this.readTextResponse(request, response);
   }
 
   private async sendRequest(
@@ -270,6 +270,24 @@ export class Rest {
     }
 
     return data;
+  }
+
+  private async readTextResponse(request: RestRequestContext, response: Response): Promise<string> {
+    let data: unknown = await response.text();
+
+    for (const middleware of this.middlewares) {
+      const nextData = await middleware.afterResponse?.({
+        request,
+        response,
+        data,
+      });
+
+      if (nextData !== undefined) {
+        data = nextData;
+      }
+    }
+
+    return String(data);
   }
 
   private async notifyError(context: RestErrorContext): Promise<void> {

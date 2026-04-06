@@ -219,6 +219,37 @@ describe("Lunacord", () => {
     expect(nodeB!.getPlayer("guild-region")).toBe(player);
   });
 
+  it("should use failover order when region fallback is configured", () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      nodes: [
+        {
+          ...BASE_OPTIONS.nodes[0],
+          regions: ["us-east"],
+        },
+        {
+          ...BASE_OPTIONS.nodes[1],
+          regions: ["us-west"],
+        },
+      ],
+      nodeSelection: {
+        type: "region",
+        fallback: {
+          type: "failover",
+          order: ["node-b", "node-a"],
+        },
+      },
+    });
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+
+    const player = lunacord.createPlayer("guild-region-fallback", { region: "eu-central" });
+
+    expect(nodeB!.getPlayer("guild-region-fallback")).toBe(player);
+  });
+
   it("should choose nodes by failover order", () => {
     const lunacord = new Lunacord({
       ...BASE_OPTIONS,
@@ -647,6 +678,25 @@ describe("Lunacord", () => {
     await Promise.resolve();
 
     expect(restoreSpy).toHaveBeenCalledWith(player);
+  });
+
+  it("should not restore managed players when Lavalink resumes the session", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
+    node.sessionId = "session-a";
+    lunacord.createPlayer("guild-restore-resumed");
+
+    const restoreSpy = mock(() => Promise.resolve());
+    node.restorePlayer = restoreSpy;
+
+    node.emit("ready", {
+      op: "ready",
+      resumed: true,
+      sessionId: "session-a",
+    });
+    await Promise.resolve();
+
+    expect(restoreSpy).not.toHaveBeenCalled();
   });
 
   it("should let plugins observe manager events", async () => {

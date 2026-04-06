@@ -719,6 +719,23 @@ describe("Player", () => {
       expect(player.ping).toBe(42);
     });
 
+    it("should use local receipt time instead of the server clock for interpolation", () => {
+      player.current = track;
+      player.connected = true;
+      player.paused = false;
+      const nowSpy = spyOn(Date, "now");
+      nowSpy.mockReturnValue(1_000_000);
+      player.applyState({
+        time: 9_999_999,
+        position: 5_000,
+        connected: true,
+        ping: 42,
+      });
+      nowSpy.mockReturnValue(1_002_000);
+
+      expect(player.getEstimatedPosition()).toBe(7_000);
+    });
+
     it("should not advance while paused", () => {
       player.current = track;
       player.connected = true;
