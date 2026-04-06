@@ -126,7 +126,7 @@ describe("Node", () => {
   });
 
   describe("voice packet handling", () => {
-    it("should resolve a voice payload after both VOICE packets are received", async () => {
+    it("should expose a cached voice payload after both VOICE packets are received", () => {
       node.handleVoicePacket({
         t: "VOICE_STATE_UPDATE",
         d: {
@@ -137,8 +137,6 @@ describe("Node", () => {
         },
       });
 
-      const payloadPromise = node.resolveVoicePayload("guild-123");
-
       node.handleVoicePacket({
         t: "VOICE_SERVER_UPDATE",
         d: {
@@ -148,7 +146,7 @@ describe("Node", () => {
         },
       });
 
-      await expect(payloadPromise).resolves.toEqual({
+      expect(node.getVoicePayload("guild-123")).toEqual({
         channelId: "channel-123",
         endpoint: "us-east.discord.gg",
         sessionId: "voice-session-123",
@@ -230,6 +228,39 @@ describe("Node", () => {
           self_deaf: true,
         },
       });
+      expect(player.isConnected).toBe(true);
+    });
+
+    it("should no-op connectVoice when already connected to the same channel", async () => {
+      const sendGatewayPayload = mock(() => Promise.resolve());
+      const nodeWithVoiceAdapter = new Node({
+        ...NODE_OPTIONS,
+        sendGatewayPayload,
+      });
+      const player = nodeWithVoiceAdapter.createPlayer("guild-900");
+
+      nodeWithVoiceAdapter.handleVoicePacket({
+        t: "VOICE_STATE_UPDATE",
+        d: {
+          guild_id: "guild-900",
+          user_id: "user-123",
+          session_id: "voice-session-900",
+          channel_id: "channel-900",
+        },
+      });
+      nodeWithVoiceAdapter.handleVoicePacket({
+        t: "VOICE_SERVER_UPDATE",
+        d: {
+          guild_id: "guild-900",
+          token: "voice-token-900",
+          endpoint: "us-east.discord.gg",
+        },
+      });
+
+      sendGatewayPayload.mockClear();
+      await nodeWithVoiceAdapter.connectVoice("guild-900", "channel-900");
+
+      expect(sendGatewayPayload).not.toHaveBeenCalled();
       expect(player.isConnected).toBe(true);
     });
   });

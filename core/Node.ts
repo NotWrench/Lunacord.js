@@ -245,18 +245,6 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
   }
 
-  async resolveVoicePayload(
-    guildId: string,
-    timeoutMs: number = DEFAULT_VOICE_TIMEOUT_MS
-  ): Promise<VoicePayload | undefined> {
-    if (!this.voicePacketForwardingEnabled) {
-      return undefined;
-    }
-
-    await this.waitForVoice(guildId, timeoutMs);
-    return this.getVoicePayload(guildId);
-  }
-
   async connectVoice(
     guildId: string,
     channelId: string,
@@ -266,9 +254,21 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       throw new Error("Node was not configured with sendGatewayPayload");
     }
 
-    this.voiceStates.delete(guildId);
-    this.voiceServers.delete(guildId);
-    this.syncedVoiceStateKeys.delete(guildId);
+    const cachedState = this.voiceStates.get(guildId);
+    const hasCachedVoice = Boolean(cachedState && this.voiceServers.has(guildId));
+    if (cachedState?.channelId === channelId && hasCachedVoice) {
+      const player = this.players.get(guildId);
+      if (player) {
+        player.connected = true;
+      }
+      return;
+    }
+
+    if (cachedState?.channelId !== channelId) {
+      this.voiceStates.delete(guildId);
+      this.voiceServers.delete(guildId);
+      this.syncedVoiceStateKeys.delete(guildId);
+    }
 
     const connectOptions = { ...DEFAULT_VOICE_CONNECT_OPTIONS, ...options };
     await this.sendVoiceStateUpdate(guildId, {
@@ -436,7 +436,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
   }
 
-  private getVoicePayload(guildId: string): VoicePayload | undefined {
+  getVoicePayload(guildId: string): VoicePayload | undefined {
     const state = this.voiceStates.get(guildId);
     const server = this.voiceServers.get(guildId);
 

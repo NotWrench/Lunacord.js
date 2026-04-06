@@ -19,9 +19,7 @@ export interface PlayerNodeAdapter {
   ) => Promise<void>;
   destroyPlayer?: (guildId: string) => Promise<void>;
   disconnectVoice?: (guildId: string) => Promise<void>;
-  resolveVoicePayload?: (
-    guildId: string
-  ) => Promise<NonNullable<PlayerUpdatePayload["voice"]> | undefined>;
+  getVoicePayload?: (guildId: string) => NonNullable<PlayerUpdatePayload["voice"]> | undefined;
   readonly rest: Pick<Rest, "loadTracks" | "search" | "updatePlayer">;
   readonly sessionId: string | null;
 }
@@ -73,7 +71,7 @@ export class Player {
     this.current = target;
     this.paused = false;
 
-    const voicePayload = await this.node.resolveVoicePayload?.(this.guildId);
+    const voicePayload = this.node.getVoicePayload?.(this.guildId);
     const payload: PlayerUpdatePayload = {
       track: { encoded: target.encoded },
     };
