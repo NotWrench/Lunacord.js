@@ -5,6 +5,7 @@
   "types": "dist/index.d.ts",
   "module": "index.ts",
   "type": "module",
+  "license": "MIT",
   "files": [
     "dist"
   ],
