@@ -344,6 +344,57 @@ describe("Player", () => {
     });
   });
 
+  describe("repeat", () => {
+    it("should toggle repeatTrack mode", () => {
+      expect(player.isRepeatTrackEnabled).toBe(false);
+
+      const enabled = player.repeatTrack();
+      expect(enabled).toBe(true);
+      expect(player.isRepeatTrackEnabled).toBe(true);
+
+      const disabled = player.repeatTrack();
+      expect(disabled).toBe(false);
+      expect(player.isRepeatTrackEnabled).toBe(false);
+    });
+
+    it("should toggle repeatQueue mode", () => {
+      expect(player.isRepeatQueueEnabled).toBe(false);
+
+      const enabled = player.repeatQueue();
+      expect(enabled).toBe(true);
+      expect(player.isRepeatQueueEnabled).toBe(true);
+
+      const disabled = player.repeatQueue();
+      expect(disabled).toBe(false);
+      expect(player.isRepeatQueueEnabled).toBe(false);
+    });
+
+    it("should make repeat modes mutually exclusive", () => {
+      player.repeatTrack(true);
+      expect(player.isRepeatTrackEnabled).toBe(true);
+      expect(player.isRepeatQueueEnabled).toBe(false);
+
+      player.repeatQueue(true);
+      expect(player.isRepeatQueueEnabled).toBe(true);
+      expect(player.isRepeatTrackEnabled).toBe(false);
+    });
+
+    it("should emit repeat mode toggle events", () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      player.repeatTrack(true);
+      player.repeatQueue(true);
+
+      const eventTypes = getMockEvents(emitPlayerEvent)
+        .filter((event): event is { type: string } => typeof event === "object" && event !== null)
+        .map((event) => event.type);
+
+      expect(eventTypes).toContain("playerRepeatTrack");
+      expect(eventTypes).toContain("playerRepeatQueue");
+    });
+  });
+
   describe("filters", () => {
     it("should set filters and update local state", async () => {
       const filters: Filters = {

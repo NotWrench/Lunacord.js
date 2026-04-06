@@ -268,11 +268,23 @@ describe("Lavacord", () => {
     lavacord.on("playerQueueRemove", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:queueRemove:${guildId}`);
     });
+    lavacord.on("playerRepeatQueue", ({ guildId, enabled, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:repeatQueue:${guildId}:${enabled ? "on" : "off"}`);
+    });
+    lavacord.on("playerRepeatTrack", ({ guildId, enabled, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:repeatTrack:${guildId}:${enabled ? "on" : "off"}`);
+    });
     lavacord.on("playerSkip", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:skip:${guildId}`);
     });
     lavacord.on("playerStop", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:stop:${guildId}`);
+    });
+    lavacord.on("playerFiltersUpdate", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:filtersUpdate:${guildId}`);
+    });
+    lavacord.on("playerFiltersClear", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:filtersClear:${guildId}`);
     });
     lavacord.on("playerVolumeUpdate", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:volume:${guildId}`);
@@ -307,6 +319,14 @@ describe("Lavacord", () => {
       index: 0,
       queueSize: 0,
     });
+    node.emit("playerRepeatQueue", {
+      guildId: "guild-123",
+      enabled: true,
+    });
+    node.emit("playerRepeatTrack", {
+      guildId: "guild-123",
+      enabled: false,
+    });
     node.emit("playerSkip", {
       guildId: "guild-123",
       skippedTrack: track,
@@ -321,6 +341,18 @@ describe("Lavacord", () => {
       guildId: "guild-123",
       volume: 250,
     });
+    node.emit("playerFiltersUpdate", {
+      guildId: "guild-123",
+      filters: {
+        timescale: {
+          speed: 1.1,
+        },
+      },
+    });
+    node.emit("playerFiltersClear", {
+      guildId: "guild-123",
+      filters: {},
+    });
 
     expect(events).toEqual([
       "node-a:create:guild-123",
@@ -331,9 +363,13 @@ describe("Lavacord", () => {
       "node-a:play:guild-123",
       "node-a:queueAdd:guild-123",
       "node-a:queueRemove:guild-123",
+      "node-a:repeatQueue:guild-123:on",
+      "node-a:repeatTrack:guild-123:off",
       "node-a:skip:guild-123",
       "node-a:stop:guild-123",
       "node-a:volume:guild-123",
+      "node-a:filtersUpdate:guild-123",
+      "node-a:filtersClear:guild-123",
     ]);
   });
 

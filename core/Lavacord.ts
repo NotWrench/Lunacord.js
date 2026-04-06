@@ -41,10 +41,14 @@ export interface LavacordEvents extends NodeBoundEvents {
   playerCreate: NodeBound<NodeEvents["playerCreate"]>;
   playerDestroy: NodeBound<NodeEvents["playerDestroy"]>;
   playerDisconnect: NodeBound<NodeEvents["playerDisconnect"]>;
+  playerFiltersClear: NodeBound<NodeEvents["playerFiltersClear"]>;
+  playerFiltersUpdate: NodeBound<NodeEvents["playerFiltersUpdate"]>;
   playerPause: NodeBound<NodeEvents["playerPause"]>;
   playerPlay: NodeBound<NodeEvents["playerPlay"]>;
   playerQueueAdd: NodeBound<NodeEvents["playerQueueAdd"]>;
   playerQueueRemove: NodeBound<NodeEvents["playerQueueRemove"]>;
+  playerRepeatQueue: NodeBound<NodeEvents["playerRepeatQueue"]>;
+  playerRepeatTrack: NodeBound<NodeEvents["playerRepeatTrack"]>;
   playerResume: NodeBound<NodeEvents["playerResume"]>;
   playerSkip: NodeBound<NodeEvents["playerSkip"]>;
   playerStop: NodeBound<NodeEvents["playerStop"]>;
@@ -232,6 +236,12 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
     node.on("playerPause", (payload) => {
       this.emit("playerPause", { ...payload, node });
     });
+    node.on("playerFiltersClear", (payload) => {
+      this.emit("playerFiltersClear", { ...payload, node });
+    });
+    node.on("playerFiltersUpdate", (payload) => {
+      this.emit("playerFiltersUpdate", { ...payload, node });
+    });
     node.on("playerPlay", (payload) => {
       this.emit("playerPlay", { ...payload, node });
     });
@@ -243,6 +253,12 @@ export class Lavacord extends TypedEventEmitter<LavacordEvents> {
     });
     node.on("playerResume", (payload) => {
       this.emit("playerResume", { ...payload, node });
+    });
+    node.on("playerRepeatQueue", (payload) => {
+      this.emit("playerRepeatQueue", { ...payload, node });
+    });
+    node.on("playerRepeatTrack", (payload) => {
+      this.emit("playerRepeatTrack", { ...payload, node });
     });
     node.on("playerSkip", (payload) => {
       this.emit("playerSkip", { ...payload, node });

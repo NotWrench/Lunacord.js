@@ -123,6 +123,62 @@ describe("Node", () => {
       expect(errors).toHaveLength(1);
       expect(errors[0]?.message).toBe("Queue advance failed");
     });
+
+    it("should replay the same track when repeatTrack is enabled", async () => {
+      node.sessionId = "session-123";
+      node.rest.updatePlayer = mock(() => Promise.resolve());
+
+      const player = node.createPlayer("guild-repeat-track");
+      const queuedTrack = new Track({
+        ...MOCK_RAW_TRACK,
+        encoded: "QAABJAMACk5ldmVyIEdvbm5hX3F1ZXVl...",
+      });
+      player.add(queuedTrack);
+      player.repeatTrack(true);
+
+      node.socket.emit("event", {
+        op: "event",
+        guildId: "guild-repeat-track",
+        type: "TrackEndEvent",
+        track: MOCK_RAW_TRACK,
+        reason: "finished",
+      });
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(player.current?.encoded).toBe(MOCK_RAW_TRACK.encoded);
+      expect(player.queue.size).toBe(1);
+      expect(player.queue.peek()?.encoded).toBe(queuedTrack.encoded);
+    });
+
+    it("should rotate queue when repeatQueue is enabled", async () => {
+      node.sessionId = "session-123";
+      node.rest.updatePlayer = mock(() => Promise.resolve());
+
+      const player = node.createPlayer("guild-repeat-queue");
+      const queuedTrack = new Track({
+        ...MOCK_RAW_TRACK,
+        encoded: "QAABJAMACk5ldmVyIEdvbm5hX3F1ZXVlX25leHQ...",
+      });
+      player.add(queuedTrack);
+      player.repeatQueue(true);
+
+      node.socket.emit("event", {
+        op: "event",
+        guildId: "guild-repeat-queue",
+        type: "TrackEndEvent",
+        track: MOCK_RAW_TRACK,
+        reason: "finished",
+      });
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(player.current?.encoded).toBe(queuedTrack.encoded);
+      expect(player.queue.size).toBe(1);
+      expect(player.queue.peek()?.encoded).toBe(MOCK_RAW_TRACK.encoded);
+    });
   });
 
   describe("voice packet handling", () => {

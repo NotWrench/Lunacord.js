@@ -56,10 +56,14 @@ export interface NodeEvents {
   playerCreate: { guildId: string; player: Player };
   playerDestroy: { guildId: string };
   playerDisconnect: PlayerDisconnectEvent;
+  playerFiltersClear: PlayerActionPayload<"playerFiltersClear">;
+  playerFiltersUpdate: PlayerActionPayload<"playerFiltersUpdate">;
   playerPause: PlayerActionPayload<"playerPause">;
   playerPlay: PlayerActionPayload<"playerPlay">;
   playerQueueAdd: PlayerActionPayload<"playerQueueAdd">;
   playerQueueRemove: PlayerActionPayload<"playerQueueRemove">;
+  playerRepeatQueue: PlayerActionPayload<"playerRepeatQueue">;
+  playerRepeatTrack: PlayerActionPayload<"playerRepeatTrack">;
   playerResume: PlayerActionPayload<"playerResume">;
   playerSkip: PlayerActionPayload<"playerSkip">;
   playerStop: PlayerActionPayload<"playerStop">;
@@ -383,6 +387,18 @@ export class Node extends TypedEventEmitter<NodeEvents> {
           guildId: event.guildId,
         });
         return;
+      case "playerFiltersClear":
+        this.emit("playerFiltersClear", {
+          guildId: event.guildId,
+          filters: event.filters,
+        });
+        return;
+      case "playerFiltersUpdate":
+        this.emit("playerFiltersUpdate", {
+          guildId: event.guildId,
+          filters: event.filters,
+        });
+        return;
       case "playerPlay":
         this.emit("playerPlay", {
           guildId: event.guildId,
@@ -408,6 +424,18 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       case "playerResume":
         this.emit("playerResume", {
           guildId: event.guildId,
+        });
+        return;
+      case "playerRepeatQueue":
+        this.emit("playerRepeatQueue", {
+          guildId: event.guildId,
+          enabled: event.enabled,
+        });
+        return;
+      case "playerRepeatTrack":
+        this.emit("playerRepeatTrack", {
+          guildId: event.guildId,
+          enabled: event.enabled,
         });
         return;
       case "playerSkip":
@@ -557,7 +585,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
         const track = new Track(event.track);
         player.current = null;
         this.emit("trackEnd", { player, track, reason: event.reason });
-        void this.handleQueueAdvance(player, event.reason);
+        void this.handleQueueAdvance(player, event.reason, track);
         break;
       }
 
@@ -767,8 +795,24 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
   private async handleQueueAdvance(
     player: Player,
-    reason: "finished" | "loadFailed" | "stopped" | "replaced" | "cleanup"
+    reason: "finished" | "loadFailed" | "stopped" | "replaced" | "cleanup",
+    endedTrack: Track
   ): Promise<void> {
+    if (reason === "finished" && player.isRepeatTrackEnabled) {
+      await player.play(endedTrack);
+      return;
+    }
+
+    if (reason === "finished" && player.isRepeatQueueEnabled) {
+      player.add(endedTrack);
+
+      if (!player.queue.isEmpty) {
+        await player.play();
+      }
+
+      return;
+    }
+
     if (!this.shouldAutoAdvance(reason) || player.queue.isEmpty) {
       return;
     }

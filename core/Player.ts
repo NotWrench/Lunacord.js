@@ -98,6 +98,16 @@ export type PlayerActionEvent =
       filters: Filters;
       guildId: string;
       type: "playerFiltersUpdate";
+    }
+  | {
+      enabled: boolean;
+      guildId: string;
+      type: "playerRepeatQueue";
+    }
+  | {
+      enabled: boolean;
+      guildId: string;
+      type: "playerRepeatTrack";
     };
 
 export interface PlayerNodeAdapter {
@@ -123,6 +133,8 @@ export class Player {
   volume = 100;
   position = 0;
   connected = false;
+  private repeatQueueEnabled = false;
+  private repeatTrackEnabled = false;
 
   private readonly node: PlayerNodeAdapter;
 
@@ -145,6 +157,48 @@ export class Player {
 
   get isConnected(): boolean {
     return this.connected;
+  }
+
+  get isRepeatQueueEnabled(): boolean {
+    return this.repeatQueueEnabled;
+  }
+
+  get isRepeatTrackEnabled(): boolean {
+    return this.repeatTrackEnabled;
+  }
+
+  repeatQueue(enabled?: boolean): boolean {
+    const next = enabled ?? !this.repeatQueueEnabled;
+    this.repeatQueueEnabled = next;
+
+    if (next) {
+      this.repeatTrackEnabled = false;
+    }
+
+    this.emitActionEvent({
+      type: "playerRepeatQueue",
+      guildId: this.guildId,
+      enabled: this.repeatQueueEnabled,
+    });
+
+    return this.repeatQueueEnabled;
+  }
+
+  repeatTrack(enabled?: boolean): boolean {
+    const next = enabled ?? !this.repeatTrackEnabled;
+    this.repeatTrackEnabled = next;
+
+    if (next) {
+      this.repeatQueueEnabled = false;
+    }
+
+    this.emitActionEvent({
+      type: "playerRepeatTrack",
+      guildId: this.guildId,
+      enabled: this.repeatTrackEnabled,
+    });
+
+    return this.repeatTrackEnabled;
   }
 
   async connect(channelId: string, options?: VoiceConnectOptions): Promise<void> {

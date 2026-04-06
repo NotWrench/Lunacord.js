@@ -58,6 +58,12 @@ client.on("clientReady", async () => {
   lavacord.on("trackEnd", ({ track, reason }) =>
     console.log(`[Lavalink] Track ended: ${track.title} (${reason})`)
   );
+  lavacord.on("playerRepeatTrack", ({ guildId, enabled }) => {
+    console.log(`[Lavalink] Repeat track ${enabled ? "enabled" : "disabled"} for guild ${guildId}`);
+  });
+  lavacord.on("playerRepeatQueue", ({ guildId, enabled }) => {
+    console.log(`[Lavalink] Repeat queue ${enabled ? "enabled" : "disabled"} for guild ${guildId}`);
+  });
   lavacord.on("trackException", ({ track, exception }) =>
     console.error(
       `[Lavalink] Track exception: ${track.title}`,
@@ -156,6 +162,28 @@ client.on("messageCreate", async (message) => {
     }
     await player.skip();
     await message.reply("Skipped!");
+  }
+
+  if (command === "!repeattrack") {
+    const player = lavacord.getPlayer(message.guild.id);
+    if (!player) {
+      await message.reply("Nothing is playing.");
+      return;
+    }
+
+    const enabled = player.repeatTrack();
+    await message.reply(`Repeat track is now **${enabled ? "enabled" : "disabled"}**.`);
+  }
+
+  if (command === "!repeatqueue") {
+    const player = lavacord.getPlayer(message.guild.id);
+    if (!player) {
+      await message.reply("Nothing is playing.");
+      return;
+    }
+
+    const enabled = player.repeatQueue();
+    await message.reply(`Repeat queue is now **${enabled ? "enabled" : "disabled"}**.`);
   }
 
   if (command === "!filter") {
