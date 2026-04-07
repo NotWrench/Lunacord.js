@@ -166,7 +166,6 @@ describe("Player", () => {
       expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
         track: { encoded: track.encoded },
         voice: {
-          channelId: "channel-123",
           endpoint: "us-east.discord.gg",
           sessionId: "voice-session-123",
           token: "voice-token",

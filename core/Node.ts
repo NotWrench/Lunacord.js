@@ -133,7 +133,11 @@ const DEFAULT_VOICE_CONNECT_OPTIONS: Required<Pick<VoiceConnectOptions, "selfDea
   };
 const AUTO_ADVANCE_REASONS = new Set(["finished", "loadFailed"] as const);
 type AutoAdvanceReason = "finished" | "loadFailed";
-type VoicePayload = NonNullable<PlayerUpdatePayload["voice"]>;
+type LavalinkVoicePayload = NonNullable<PlayerUpdatePayload["voice"]>;
+
+export interface InternalVoicePayload extends LavalinkVoicePayload {
+  channelId: string;
+}
 
 interface VoiceStateCache {
   channelId: string;
@@ -683,7 +687,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
   }
 
-  getVoicePayload(guildId: string): VoicePayload | undefined {
+  getVoicePayload(guildId: string): InternalVoicePayload | undefined {
     const state = this.voiceStates.get(guildId);
     const server = this.voiceServers.get(guildId);
 
@@ -819,7 +823,8 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     try {
-      await this.rest.updatePlayer(sessionId, guildId, { voice: voicePayload });
+      const { channelId: _channelId, ...voiceForApi } = voicePayload;
+      await this.rest.updatePlayer(sessionId, guildId, { voice: voiceForApi });
       this.syncedVoiceStateKeys.set(guildId, voiceKey);
     } catch (error) {
       this.emit("error", error instanceof Error ? error : new Error(String(error)));
@@ -946,7 +951,8 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     if (voicePayload) {
-      payload.voice = voicePayload;
+      const { channelId: _channelId, ...voiceForApi } = voicePayload;
+      payload.voice = voiceForApi;
     }
 
     if (Object.keys(payload).length === 0) {

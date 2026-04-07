@@ -304,7 +304,6 @@ describe("Node", () => {
 
       expect(node.rest.updatePlayer).toHaveBeenCalledWith("session-123", "guild-456", {
         voice: {
-          channelId: "channel-456",
           endpoint: "us-west.discord.gg",
           sessionId: "voice-session-456",
           token: "voice-token-456",
@@ -613,7 +612,6 @@ describe("Node", () => {
           },
         },
         voice: {
-          channelId: "channel-restore",
           endpoint: "us-east.discord.gg",
           sessionId: "voice-session-restore",
           token: "voice-token-restore",
