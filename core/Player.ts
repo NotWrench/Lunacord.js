@@ -266,10 +266,7 @@ export class Player {
     };
 
     if (voicePayload) {
-      const { channelId: _channelId, ...voiceForApi } = voicePayload as typeof voicePayload & {
-        channelId?: string;
-      };
-      payload.voice = voiceForApi;
+      payload.voice = voicePayload;
     }
 
     if (options) {

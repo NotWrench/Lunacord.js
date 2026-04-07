@@ -687,14 +687,8 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
   }
 
-  getVoicePayload(guildId: string): LavalinkVoicePayload | undefined {
-    const voicePayload = this.getInternalVoicePayload(guildId);
-    if (!voicePayload) {
-      return undefined;
-    }
-
-    const { channelId: _channelId, ...voiceForApi } = voicePayload;
-    return voiceForApi;
+  getVoicePayload(guildId: string): InternalVoicePayload | undefined {
+    return this.getInternalVoicePayload(guildId);
   }
 
   private getInternalVoicePayload(guildId: string): InternalVoicePayload | undefined {
@@ -833,8 +827,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     try {
-      const { channelId: _channelId, ...voiceForApi } = voicePayload;
-      await this.rest.updatePlayer(sessionId, guildId, { voice: voiceForApi });
+      await this.rest.updatePlayer(sessionId, guildId, { voice: voicePayload });
       this.syncedVoiceStateKeys.set(guildId, voiceKey);
     } catch (error) {
       this.emit("error", error instanceof Error ? error : new Error(String(error)));
