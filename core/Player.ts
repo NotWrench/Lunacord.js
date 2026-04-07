@@ -13,7 +13,7 @@ import type { SearchResult } from "../structures/SearchResult";
 import { toSearchResult } from "../structures/SearchResult";
 import type { Track } from "../structures/Track";
 import type { Filters, PlayerState, PlayerUpdatePayload, SearchProvider } from "../types";
-import type { InternalVoicePayload, VoiceConnectOptions } from "./Node";
+import type { VoiceConnectOptions } from "./Node";
 
 const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;
@@ -125,7 +125,7 @@ export interface PlayerNodeAdapter {
   destroyPlayer?: (guildId: string) => Promise<void>;
   disconnectVoice?: (guildId: string) => Promise<void>;
   emitPlayerEvent?: (event: PlayerActionEvent) => void;
-  getVoicePayload?: (guildId: string) => InternalVoicePayload | undefined;
+  getVoicePayload?: (guildId: string) => NonNullable<PlayerUpdatePayload["voice"]> | undefined;
   readonly rest: Pick<Rest, "loadTracks" | "search" | "updatePlayer">;
   readonly sessionId: string | null;
   transformSearchResult?: (
@@ -266,7 +266,9 @@ export class Player {
     };
 
     if (voicePayload) {
-      const { channelId: _channelId, ...voiceForApi } = voicePayload;
+      const { channelId: _channelId, ...voiceForApi } = voicePayload as typeof voicePayload & {
+        channelId?: string;
+      };
       payload.voice = voiceForApi;
     }
 

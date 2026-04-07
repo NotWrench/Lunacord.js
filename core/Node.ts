@@ -687,7 +687,17 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
   }
 
-  getVoicePayload(guildId: string): InternalVoicePayload | undefined {
+  getVoicePayload(guildId: string): LavalinkVoicePayload | undefined {
+    const voicePayload = this.getInternalVoicePayload(guildId);
+    if (!voicePayload) {
+      return undefined;
+    }
+
+    const { channelId: _channelId, ...voiceForApi } = voicePayload;
+    return voiceForApi;
+  }
+
+  private getInternalVoicePayload(guildId: string): InternalVoicePayload | undefined {
     const state = this.voiceStates.get(guildId);
     const server = this.voiceServers.get(guildId);
 
@@ -811,7 +821,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
   private async trySyncVoiceState(guildId: string): Promise<void> {
     const sessionId = this.sessionId;
-    const voicePayload = this.getVoicePayload(guildId);
+    const voicePayload = this.getInternalVoicePayload(guildId);
 
     if (!sessionId || !voicePayload) {
       return;
@@ -951,8 +961,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     if (voicePayload) {
-      const { channelId: _channelId, ...voiceForApi } = voicePayload;
-      payload.voice = voiceForApi;
+      payload.voice = voicePayload;
     }
 
     if (Object.keys(payload).length === 0) {

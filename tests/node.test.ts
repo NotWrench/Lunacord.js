@@ -270,7 +270,6 @@ describe("Node", () => {
       });
 
       expect(node.getVoicePayload("guild-123")).toEqual({
-        channelId: "channel-123",
         endpoint: "us-east.discord.gg",
         sessionId: "voice-session-123",
         token: "voice-token",
