@@ -692,6 +692,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     return {
+      channelId: state.channelId,
       endpoint: server.endpoint,
       sessionId: state.sessionId,
       token: server.token,
@@ -812,12 +813,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       return;
     }
 
-    const voiceState = this.voiceStates.get(guildId);
-    if (!voiceState) {
-      return;
-    }
-
-    const voiceKey = `${sessionId}:${voicePayload.sessionId}:${voiceState.channelId}:${voicePayload.endpoint}:${voicePayload.token}`;
+    const voiceKey = `${sessionId}:${voicePayload.sessionId}:${voicePayload.channelId}:${voicePayload.endpoint}:${voicePayload.token}`;
     if (this.syncedVoiceStateKeys.get(guildId) === voiceKey) {
       return;
     }

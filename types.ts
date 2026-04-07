@@ -332,6 +332,7 @@ export const PlayerUpdatePayloadSchema = z.object({
   filters: FiltersSchema.optional(),
   voice: z
     .object({
+      channelId: z.string(),
       endpoint: z.string(),
       sessionId: z.string(),
       token: z.string(),
