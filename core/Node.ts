@@ -135,10 +135,6 @@ const AUTO_ADVANCE_REASONS = new Set(["finished", "loadFailed"] as const);
 type AutoAdvanceReason = "finished" | "loadFailed";
 type LavalinkVoicePayload = NonNullable<PlayerUpdatePayload["voice"]>;
 
-export interface InternalVoicePayload extends LavalinkVoicePayload {
-  channelId: string;
-}
-
 interface VoiceStateCache {
   channelId: string;
   sessionId: string;
@@ -687,11 +683,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
   }
 
-  getVoicePayload(guildId: string): InternalVoicePayload | undefined {
-    return this.getInternalVoicePayload(guildId);
-  }
-
-  private getInternalVoicePayload(guildId: string): InternalVoicePayload | undefined {
+  getVoicePayload(guildId: string): LavalinkVoicePayload | undefined {
     const state = this.voiceStates.get(guildId);
     const server = this.voiceServers.get(guildId);
 
@@ -815,7 +807,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
   private async trySyncVoiceState(guildId: string): Promise<void> {
     const sessionId = this.sessionId;
-    const voicePayload = this.getInternalVoicePayload(guildId);
+    const voicePayload = this.getVoicePayload(guildId);
 
     if (!sessionId || !voicePayload) {
       return;
