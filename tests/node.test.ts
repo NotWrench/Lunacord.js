@@ -571,11 +571,11 @@ describe("Node", () => {
       player.current = new Track(MOCK_RAW_TRACK);
       player.volume = 250;
       player.paused = true;
-      player.filters = {
+      await player.setFilters({
         timescale: {
           speed: 1.1,
         },
-      };
+      });
       player.position = 12_000;
 
       node.handleVoicePacket({

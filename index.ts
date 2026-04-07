@@ -10,13 +10,7 @@ export {
   type LunacordPluginEvent,
 } from "./core/Lunacord";
 export { Node } from "./core/Node";
-export {
-  BASSBOOST_FILTERS,
-  KARAOKE_FILTERS,
-  NIGHTCORE_FILTERS,
-  Player,
-  VAPORWAVE_FILTERS,
-} from "./core/Player";
+export { Player } from "./core/Player";
 // Errors
 export {
   LavalinkRestError,
@@ -28,6 +22,13 @@ export {
   type RestResponseContext,
   ValidationError,
 } from "./rest/Rest";
+export {
+  BASSBOOST_FILTERS,
+  Filter,
+  KARAOKE_FILTERS,
+  NIGHTCORE_FILTERS,
+  VAPORWAVE_FILTERS,
+} from "./structures/Filter";
 export { Queue, type QueueRemoveDuplicateOptions } from "./structures/Queue";
 export type { SearchResult } from "./structures/SearchResult";
 export { Track } from "./structures/Track";

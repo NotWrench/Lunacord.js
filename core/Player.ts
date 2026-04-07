@@ -1,6 +1,13 @@
 // core/Player.ts
 
 import type { Rest } from "../rest/Rest";
+import {
+  BASSBOOST_FILTERS,
+  Filter,
+  KARAOKE_FILTERS,
+  NIGHTCORE_FILTERS,
+  VAPORWAVE_FILTERS,
+} from "../structures/Filter";
 import { Queue, type QueueRemoveDuplicateOptions } from "../structures/Queue";
 import type { SearchResult } from "../structures/SearchResult";
 import { toSearchResult } from "../structures/SearchResult";
@@ -11,38 +18,7 @@ import type { VoiceConnectOptions } from "./Node";
 const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;
 
-export const BASSBOOST_FILTERS: Filters = {
-  equalizer: [
-    { band: 0, gain: 0.15 },
-    { band: 1, gain: 0.125 },
-    { band: 2, gain: 0.1 },
-  ],
-};
-
-export const NIGHTCORE_FILTERS: Filters = {
-  timescale: {
-    pitch: 1.2,
-    rate: 1.0,
-    speed: 1.15,
-  },
-};
-
-export const VAPORWAVE_FILTERS: Filters = {
-  timescale: {
-    pitch: 0.85,
-    rate: 1.0,
-    speed: 0.8,
-  },
-};
-
-export const KARAOKE_FILTERS: Filters = {
-  karaoke: {
-    filterBand: 220,
-    filterWidth: 100,
-    level: 1,
-    monoLevel: 1,
-  },
-};
+export { BASSBOOST_FILTERS, KARAOKE_FILTERS, NIGHTCORE_FILTERS, VAPORWAVE_FILTERS };
 
 export type PlayerActionEvent =
   | {
@@ -161,8 +137,8 @@ export interface PlayerNodeAdapter {
 export class Player {
   readonly guildId: string;
   readonly queue = new Queue();
+  readonly filter: Filter;
   current: Track | null = null;
-  filters: Filters = {};
   paused = false;
   volume = 100;
   position = 0;
@@ -178,6 +154,25 @@ export class Player {
   constructor(guildId: string, node: PlayerNodeAdapter) {
     this.guildId = guildId;
     this.node = node;
+    this.filter = new Filter({
+      guildId,
+      getSessionId: () => this.getSessionId(),
+      rest: this.node.rest,
+      onClear: (filters) => {
+        this.emitActionEvent({
+          type: "playerFiltersClear",
+          guildId: this.guildId,
+          filters,
+        });
+      },
+      onUpdate: (filters) => {
+        this.emitActionEvent({
+          type: "playerFiltersUpdate",
+          guildId: this.guildId,
+          filters,
+        });
+      },
+    });
   }
 
   private emitActionEvent(event: PlayerActionEvent): void {
@@ -202,6 +197,10 @@ export class Player {
 
   get isRepeatTrackEnabled(): boolean {
     return this.repeatTrackEnabled;
+  }
+
+  get filters(): Filters {
+    return this.filter.value;
   }
 
   repeatQueue(enabled?: boolean): boolean {
@@ -337,47 +336,31 @@ export class Player {
   }
 
   async setFilters(filters: Filters): Promise<void> {
-    this.filters = cloneFilters(filters);
-    await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, {
-      filters: this.filters,
-    });
-    this.emitActionEvent({
-      type: "playerFiltersUpdate",
-      guildId: this.guildId,
-      filters: this.filters,
-    });
+    await this.filter.set(filters);
   }
 
   async updateFilters(filters: Partial<Filters>): Promise<void> {
-    await this.setFilters(mergeFilters(this.filters, filters));
+    await this.filter.update(filters);
   }
 
   async clearFilters(): Promise<void> {
-    this.filters = {};
-    await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, {
-      filters: this.filters,
-    });
-    this.emitActionEvent({
-      type: "playerFiltersClear",
-      guildId: this.guildId,
-      filters: this.filters,
-    });
+    await this.filter.clear();
   }
 
   setBassboost(): Promise<void> {
-    return this.setFilters(BASSBOOST_FILTERS);
+    return this.filter.setBassboost();
   }
 
   setNightcore(): Promise<void> {
-    return this.setFilters(NIGHTCORE_FILTERS);
+    return this.filter.setNightcore();
   }
 
   setVaporwave(): Promise<void> {
-    return this.setFilters(VAPORWAVE_FILTERS);
+    return this.filter.setVaporwave();
   }
 
   setKaraoke(): Promise<void> {
-    return this.setFilters(KARAOKE_FILTERS);
+    return this.filter.setKaraoke();
   }
 
   async skip(): Promise<void> {
@@ -589,7 +572,7 @@ export class Player {
   } {
     return {
       current: this.current,
-      filters: cloneFilters(this.filters),
+      filters: this.filters,
       paused: this.paused,
       position: this.getEstimatedPosition(),
       queue: this.getQueue(),
@@ -599,65 +582,6 @@ export class Player {
     };
   }
 }
-
-const cloneFilters = (filters: Filters): Filters => JSON.parse(JSON.stringify(filters)) as Filters;
-
-const mergeFilters = (current: Filters, next: Partial<Filters>): Filters => ({
-  ...current,
-  ...next,
-  channelMix: mergeObject(current.channelMix, next.channelMix),
-  distortion: mergeObject(current.distortion, next.distortion),
-  equalizer: mergeEqualizer(current.equalizer, next.equalizer),
-  karaoke: mergeObject(current.karaoke, next.karaoke),
-  lowPass: mergeObject(current.lowPass, next.lowPass),
-  pluginFilters: mergeObject(current.pluginFilters, next.pluginFilters),
-  rotation: mergeObject(current.rotation, next.rotation),
-  timescale: mergeObject(current.timescale, next.timescale),
-  tremolo: mergeObject(current.tremolo, next.tremolo),
-  vibrato: mergeObject(current.vibrato, next.vibrato),
-});
-
-const mergeObject = <T extends object>(current?: T, next?: Partial<T>): T | undefined => {
-  if (!current && !next) {
-    return undefined;
-  }
-
-  return {
-    ...current,
-    ...next,
-  } as T;
-};
-
-type EqualizerBand = NonNullable<Filters["equalizer"]>[number];
-
-const mergeEqualizer = (
-  current?: Filters["equalizer"],
-  next?: Filters["equalizer"]
-): Filters["equalizer"] => {
-  if (!current && !next) {
-    return undefined;
-  }
-
-  if (!current) {
-    return next;
-  }
-
-  if (!next) {
-    return current;
-  }
-
-  const merged = new Map<number, EqualizerBand>();
-
-  for (const band of current) {
-    merged.set(band.band, band);
-  }
-
-  for (const band of next) {
-    merged.set(band.band, band);
-  }
-
-  return [...merged.values()].sort((left, right) => left.band - right.band);
-};
 
 const clampPosition = (positionMs: number, track: Track): number => {
   const nonNegativePosition = Math.max(0, positionMs);

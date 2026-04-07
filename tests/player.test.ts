@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
 import type { PlayerNodeAdapter } from "../core/Player";
 import { Player } from "../core/Player";
+import { Filter } from "../structures/Filter";
 import { Queue } from "../structures/Queue";
 import type { SearchResult } from "../structures/SearchResult";
 import { Track } from "../structures/Track";
@@ -503,6 +504,14 @@ describe("Player", () => {
   });
 
   describe("filters", () => {
+    it("should create a Filter instance for each player", () => {
+      const anotherPlayer = new Player("guild-456", mockNode);
+
+      expect(player.filter).toBeInstanceOf(Filter);
+      expect(anotherPlayer.filter).toBeInstanceOf(Filter);
+      expect(player.filter).not.toBe(anotherPlayer.filter);
+    });
+
     it("should set filters and update local state", async () => {
       const filters: Filters = {
         timescale: {
