@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits } from "discord.js";
-import { Lunacord } from "../index";
+import { Lunacord, SearchProvider } from "../index";
 
 const TOKEN = process.env.DISCORD_TOKEN;
 
@@ -18,6 +18,9 @@ const client = new Client({
 });
 
 let lunacord: Lunacord | null = null;
+const SEARCH_PROVIDERS = new Set<string>(Object.values(SearchProvider));
+
+const isSearchProvider = (value: string): value is SearchProvider => SEARCH_PROVIDERS.has(value);
 
 // Forward all Discord raw packets so Lunacord can manage VOICE_* state internally.
 client.on("raw", (packet) => {
@@ -131,9 +134,20 @@ client.on("messageCreate", async (message) => {
   const command = args.shift()?.toLowerCase();
 
   if (command === "!play") {
-    const query = args.join(" ");
-    if (!query) {
-      await message.reply("Please provide a search query. Usage: `!play <song>`");
+    const providerArg = args.shift()?.toLowerCase();
+    const query = args.join(" ").trim();
+
+    if (!providerArg || !query) {
+      await message.reply(
+        "Usage: `!play <provider> <song>` (providers: ytsearch, ytmsearch, scsearch, spsearch, dzsearch, amsearch)"
+      );
+      return;
+    }
+
+    if (!isSearchProvider(providerArg)) {
+      await message.reply(
+        "Invalid provider. Use one of: ytsearch, ytmsearch, scsearch, spsearch, dzsearch, amsearch."
+      );
       return;
     }
 
@@ -146,7 +160,7 @@ client.on("messageCreate", async (message) => {
     try {
       const player = lunacord.createPlayer(message.guild.id);
       await player.connect(voiceChannel.id);
-      const result = await player.searchAndPlay(query);
+      const result = await player.searchAndPlay(query, providerArg);
 
       if (result.loadType === "empty" || result.loadType === "error") {
         await message.reply("No results found or an error occurred.");
