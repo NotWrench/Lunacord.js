@@ -133,7 +133,7 @@ const DEFAULT_VOICE_CONNECT_OPTIONS: Required<Pick<VoiceConnectOptions, "selfDea
   };
 const AUTO_ADVANCE_REASONS = new Set(["finished", "loadFailed"] as const);
 type AutoAdvanceReason = "finished" | "loadFailed";
-type VoicePayload = NonNullable<PlayerUpdatePayload["voice"]>;
+type LavalinkVoicePayload = NonNullable<PlayerUpdatePayload["voice"]>;
 
 interface VoiceStateCache {
   channelId: string;
@@ -683,7 +683,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
   }
 
-  getVoicePayload(guildId: string): VoicePayload | undefined {
+  getVoicePayload(guildId: string): LavalinkVoicePayload | undefined {
     const state = this.voiceStates.get(guildId);
     const server = this.voiceServers.get(guildId);
 
@@ -692,6 +692,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     return {
+      channelId: state.channelId,
       endpoint: server.endpoint,
       sessionId: state.sessionId,
       token: server.token,
@@ -812,12 +813,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       return;
     }
 
-    const voiceState = this.voiceStates.get(guildId);
-    if (!voiceState) {
-      return;
-    }
-
-    const voiceKey = `${sessionId}:${voicePayload.sessionId}:${voiceState.channelId}:${voicePayload.endpoint}:${voicePayload.token}`;
+    const voiceKey = `${sessionId}:${voicePayload.sessionId}:${voicePayload.channelId}:${voicePayload.endpoint}:${voicePayload.token}`;
     if (this.syncedVoiceStateKeys.get(guildId) === voiceKey) {
       return;
     }
