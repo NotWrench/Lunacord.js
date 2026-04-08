@@ -1,3 +1,5 @@
+import { CacheManager } from "../cache/CacheManager";
+import type { CacheOptions } from "../cache/types";
 import { LyricsClient } from "../lyrics/LyricsClient";
 import type {
   RestErrorContext,
@@ -81,6 +83,7 @@ export interface CreatePlayerOptions {
 
 export interface LunacordOptions {
   autoConnect?: boolean;
+  cache?: CacheOptions;
   clientName?: string;
   lyrics?: LyricsOptions;
   nodeSelection?: LunacordNodeSelectionStrategy;
@@ -161,6 +164,7 @@ export interface LunacordPlugin {
 }
 
 export class Lunacord extends TypedEventEmitter<LunacordEvents> {
+  private readonly cacheManager: CacheManager;
   private readonly lyricsClient: LyricsClient;
   private readonly nodes = new Map<string, Node>();
   private readonly options: LunacordOptions;
@@ -173,7 +177,10 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   constructor(options: LunacordOptions) {
     super();
     this.options = options;
-    this.lyricsClient = new LyricsClient(options.lyrics);
+    this.cacheManager = new CacheManager(options.cache);
+    this.lyricsClient = new LyricsClient(options.lyrics, {
+      cache: this.cacheManager.cache("lyrics"),
+    });
 
     for (const [index, nodeOptions] of options.nodes.entries()) {
       const id = nodeOptions.id ?? `node-${index + 1}`;
@@ -367,10 +374,12 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       emitObserved("playerConnect", { ...payload, node });
     });
     node.on("playerDisconnect", (payload) => {
+      this.lyricsClient.markTrackInactive(payload.guildId);
       emitObserved("playerDisconnect", { ...payload, node });
     });
     node.on("playerDestroy", (payload) => {
       const { guildId } = payload;
+      this.lyricsClient.markTrackInactive(guildId);
       this.playerNodes.delete(guildId);
       emitObserved("playerDestroy", { ...payload, node });
     });
@@ -384,6 +393,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       emitObserved("playerFiltersUpdate", { ...payload, node });
     });
     node.on("playerPlay", (payload) => {
+      this.lyricsClient.markTrackActive(payload.guildId, payload.track);
       emitObserved("playerPlay", { ...payload, node });
     });
     node.on("playerQueueAdd", (payload) => {
@@ -420,6 +430,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       emitObserved("playerSkip", { ...payload, node });
     });
     node.on("playerStop", (payload) => {
+      this.lyricsClient.markTrackInactive(payload.guildId);
       emitObserved("playerStop", { ...payload, node });
     });
     node.on("ready", (payload) => {
@@ -445,9 +456,11 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       emitObserved("playerVolumeUpdate", { ...payload, node });
     });
     node.on("trackStart", (payload) => {
+      this.lyricsClient.markTrackActive(payload.player.guildId, payload.track);
       emitObserved("trackStart", { ...payload, node });
     });
     node.on("trackEnd", (payload) => {
+      this.lyricsClient.markTrackInactive(payload.player.guildId, payload.track);
       emitObserved("trackEnd", { ...payload, node });
     });
     node.on("trackException", (payload) => {
