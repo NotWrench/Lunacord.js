@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { Cache } from "../cache/Cache";
+import { MemoryCacheStore } from "../cache/stores/MemoryCacheStore";
+import type { CacheStore } from "../cache/types";
 import { LyricsClient } from "../lyrics/LyricsClient";
 import { Track } from "../structures/Track";
 import type { RawTrack } from "../types";
@@ -24,6 +27,13 @@ const originalFetch = globalThis.fetch;
 
 describe("LyricsClient", () => {
   const track = new Track(MOCK_TRACK);
+  const createClient = (
+    options?: ConstructorParameters<typeof LyricsClient>[0],
+    store?: CacheStore
+  ): LyricsClient =>
+    new LyricsClient(options, {
+      cache: new Cache(store ?? new MemoryCacheStore(), "lyrics"),
+    });
 
   beforeEach(() => {
     globalThis.fetch = originalFetch;
@@ -43,7 +53,7 @@ describe("LyricsClient", () => {
       )
     ) as unknown as typeof fetch;
 
-    const client = new LyricsClient();
+    const client = createClient();
 
     await expect(client.getLyricsForTrack(track)).resolves.toMatchObject({
       status: "found",
@@ -94,7 +104,7 @@ describe("LyricsClient", () => {
       );
     }) as unknown as typeof fetch;
 
-    const client = new LyricsClient({
+    const client = createClient({
       genius: {
         clientId: "client-id",
         clientSecret: "client-secret",
@@ -151,7 +161,7 @@ describe("LyricsClient", () => {
       );
     }) as unknown as typeof fetch;
 
-    const client = new LyricsClient({
+    const client = createClient({
       genius: {
         clientId: "client-id",
         clientSecret: "client-secret",
@@ -172,7 +182,7 @@ describe("LyricsClient", () => {
       Promise.resolve(new Response(null, { status: 404 }))
     ) as unknown as typeof fetch;
 
-    const client = new LyricsClient();
+    const client = createClient();
 
     await expect(client.getLyricsForTrack(track)).resolves.toEqual({
       status: "not_found",
@@ -198,7 +208,7 @@ describe("LyricsClient", () => {
       );
     }) as unknown as typeof fetch;
 
-    const client = new LyricsClient({
+    const client = createClient({
       genius: {
         clientId: "client-id",
         clientSecret: "client-secret",
@@ -221,7 +231,7 @@ describe("LyricsClient", () => {
       return Promise.resolve(new Response(null, { status: 429 }));
     }) as unknown as typeof fetch;
 
-    const client = new LyricsClient({
+    const client = createClient({
       genius: {
         clientId: "client-id",
         clientSecret: "client-secret",
@@ -246,7 +256,7 @@ describe("LyricsClient", () => {
     );
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const client = new LyricsClient();
+    const client = createClient();
     client.markTrackActive("guild-a", track);
 
     await expect(client.getLyricsForTrack(track)).resolves.toMatchObject({
@@ -277,7 +287,7 @@ describe("LyricsClient", () => {
     );
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    const client = new LyricsClient();
+    const client = createClient();
     client.markTrackActive("guild-a", track);
     client.markTrackActive("guild-b", track);
 
@@ -310,7 +320,7 @@ describe("LyricsClient", () => {
       });
     }) as unknown as typeof fetch;
 
-    const client = new LyricsClient();
+    const client = createClient();
     client.markTrackActive("guild-a", track);
 
     const [first, second] = await Promise.all([
@@ -320,5 +330,42 @@ describe("LyricsClient", () => {
 
     expect(first).toEqual(second);
     expect(callCount).toBe(1);
+  });
+
+  it("should continue without caching when the cache store fails", async () => {
+    const fetchMock = mock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ lyrics: "Uncached lyrics" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const brokenStore: CacheStore = {
+      clear: () => Promise.reject(new Error("clear failed")),
+      delete: () => Promise.reject(new Error("delete failed")),
+      get: () => Promise.reject(new Error("get failed")),
+      has: () => Promise.reject(new Error("has failed")),
+      set: () => Promise.reject(new Error("set failed")),
+    };
+    const client = createClient(undefined, brokenStore);
+    client.markTrackActive("guild-a", track);
+
+    await expect(client.getLyricsForTrack(track)).resolves.toMatchObject({
+      status: "found",
+      lyrics: {
+        lyricsText: "Uncached lyrics",
+      },
+    });
+    await expect(client.getLyricsForTrack(track)).resolves.toMatchObject({
+      status: "found",
+      lyrics: {
+        lyricsText: "Uncached lyrics",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

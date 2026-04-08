@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
+import { NoopCacheStore } from "../cache/stores/NoopCacheStore";
 import { Lunacord } from "../core/Lunacord";
 import { Node } from "../core/Node";
 import type { LyricsClient } from "../lyrics/LyricsClient";
@@ -65,6 +66,27 @@ describe("Lunacord", () => {
     expect(lunacord.getNodes()).toHaveLength(2);
     expect(lunacord.getNode("node-a")?.id).toBe("node-a");
     expect(lunacord.getNode("node-b")?.id).toBe("node-b");
+  });
+
+  it("should create a default cache manager when no cache config is provided", () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+
+    expect(
+      (lunacord as unknown as { cacheManager: { getStore(): unknown } }).cacheManager.getStore()
+    ).toBeDefined();
+  });
+
+  it("should use a no-op cache store when caching is disabled", () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      cache: {
+        enabled: false,
+      },
+    });
+
+    expect(
+      (lunacord as unknown as { cacheManager: { getStore(): unknown } }).cacheManager.getStore()
+    ).toBeInstanceOf(NoopCacheStore);
   });
 
   it("should emit nodeCreate for managed nodes", async () => {

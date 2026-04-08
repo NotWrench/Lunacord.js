@@ -1,3 +1,5 @@
+import { CacheManager } from "../cache/CacheManager";
+import type { CacheOptions } from "../cache/types";
 import { LyricsClient } from "../lyrics/LyricsClient";
 import type {
   RestErrorContext,
@@ -81,6 +83,7 @@ export interface CreatePlayerOptions {
 
 export interface LunacordOptions {
   autoConnect?: boolean;
+  cache?: CacheOptions;
   clientName?: string;
   lyrics?: LyricsOptions;
   nodeSelection?: LunacordNodeSelectionStrategy;
@@ -161,6 +164,7 @@ export interface LunacordPlugin {
 }
 
 export class Lunacord extends TypedEventEmitter<LunacordEvents> {
+  private readonly cacheManager: CacheManager;
   private readonly lyricsClient: LyricsClient;
   private readonly nodes = new Map<string, Node>();
   private readonly options: LunacordOptions;
@@ -173,7 +177,10 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   constructor(options: LunacordOptions) {
     super();
     this.options = options;
-    this.lyricsClient = new LyricsClient(options.lyrics);
+    this.cacheManager = new CacheManager(options.cache);
+    this.lyricsClient = new LyricsClient(options.lyrics, {
+      cache: this.cacheManager.cache("lyrics"),
+    });
 
     for (const [index, nodeOptions] of options.nodes.entries()) {
       const id = nodeOptions.id ?? `node-${index + 1}`;

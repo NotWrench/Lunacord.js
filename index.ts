@@ -1,5 +1,17 @@
 // index.ts
 
+export { Cache } from "./cache/Cache";
+export { CacheManager } from "./cache/CacheManager";
+export { MemoryCacheStore } from "./cache/stores/MemoryCacheStore";
+export { NoopCacheStore } from "./cache/stores/NoopCacheStore";
+export type {
+  CacheEntry,
+  CacheNamespaceOptions,
+  CacheOptions,
+  CacheResolver,
+  CacheSetOptions,
+  CacheStore,
+} from "./cache/types";
 // Classes
 export {
   type CreatePlayerOptions,
