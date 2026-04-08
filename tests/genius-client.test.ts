@@ -107,6 +107,63 @@ describe("GeniusClient", () => {
     });
   });
 
+  it("should keep lyrics after nested div tags inside a lyrics container", async () => {
+    globalThis.fetch = mock((input: string | URL) => {
+      const url = String(input);
+      if (url.startsWith("https://api.genius.com/search")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              response: {
+                hits: [
+                  {
+                    result: {
+                      id: 42,
+                      title: "Never Gonna Give You Up",
+                      url: "https://genius.com/Rick-astley-never-gonna-give-you-up-lyrics",
+                      song_art_image_url: "https://images.genius.com/cover.jpg",
+                      release_date_for_display: "July 27, 1987",
+                      primary_artist: {
+                        name: "Rick Astley",
+                      },
+                    },
+                  },
+                ],
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          )
+        );
+      }
+
+      return Promise.resolve(
+        new Response(
+          '<html><body><div data-lyrics-container="true">Never gonna<div>give you up</div>Never gonna let you down</div></body></html>',
+          { status: 200, headers: { "Content-Type": "text/html" } }
+        )
+      );
+    }) as unknown as typeof fetch;
+
+    const client = new GeniusClient({
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      accessToken: "access-token",
+    });
+
+    await expect(client.getLyricsForTrack(track)).resolves.toEqual({
+      status: "found",
+      lyrics: {
+        title: "Never Gonna Give You Up",
+        artist: "Rick Astley",
+        url: "https://genius.com/Rick-astley-never-gonna-give-you-up-lyrics",
+        lyricsText: "Never gonnagive you up\nNever gonna let you down",
+        albumArtUrl: "https://images.genius.com/cover.jpg",
+        releaseDate: "July 27, 1987",
+        geniusId: 42,
+      },
+    });
+  });
+
   it("should return not_found when Genius search returns no hits", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(

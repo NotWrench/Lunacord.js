@@ -2,7 +2,6 @@ import { z } from "zod";
 import type { Track } from "../structures/Track";
 import type {
   GeniusOptions,
-  Lyrics,
   LyricsRequestOptions,
   LyricsResult,
   LyricsUnavailableReason,
@@ -17,7 +16,10 @@ import {
 
 const GENIUS_API_BASE_URL = "https://api.genius.com";
 const MINIMUM_MATCH_SCORE = 0.35;
-const LYRICS_CONTAINER_REGEX = /<div[^>]*data-lyrics-container="true"[^>]*>([\s\S]*?)<\/div>/gi;
+const LYRICS_CONTAINER_MARKERS = [
+  'data-lyrics-container="true"',
+  "data-lyrics-container='true'",
+] as const;
 const LEGACY_LYRICS_REGEX = /<div[^>]*class="lyrics"[^>]*>([\s\S]*?)<\/div>/i;
 const BR_TAG_REGEX = /<br\s*\/?>/gi;
 const BLOCK_CLOSE_TAG_REGEX = /<\/(p|div|h2|h3|li|section)>/gi;
@@ -29,7 +31,7 @@ const LEADING_TRANSLATIONS_LINE_REGEX =
   /^(translations?|contributors?|english|espa[ñn]ol|portugu[eê]s|fran[cç]ais|deutsch|italiano|dansk|cymraeg|русский|українська|ελληνικά)\b/i;
 const SECTION_HEADER_REGEX = /^\[[^\]]+]$/;
 const TRAILING_EMBED_LINE_REGEX = /^\d*\s*embed$/i;
-const HTML_ENTITY_REGEX = /&(#x?[0-9a-f]+|[a-z]+);/gi;
+const HTML_ENTITY_REGEX = /&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi;
 
 const GeniusSearchHitSchema = z.object({
   result: z.object({
@@ -225,7 +227,7 @@ export class GeniusClient {
 }
 
 const extractLyricsText = (html: string): string | null => {
-  const matches = [...html.matchAll(LYRICS_CONTAINER_REGEX)].map((match) => match[1] ?? "");
+  const matches = extractLyricsContainers(html);
   if (matches.length > 0) {
     return normalizeLyricsHtml(matches.join("\n"));
   }
@@ -233,6 +235,117 @@ const extractLyricsText = (html: string): string | null => {
   const legacyMatch = html.match(LEGACY_LYRICS_REGEX)?.[1];
   if (legacyMatch) {
     return normalizeLyricsHtml(legacyMatch);
+  }
+
+  return null;
+};
+
+const extractLyricsContainers = (html: string): string[] => {
+  const containers: string[] = [];
+  const lowerHtml = html.toLowerCase();
+  let searchIndex = 0;
+
+  while (searchIndex < html.length) {
+    const markerMatch = findNearestLyricsContainerMarker(lowerHtml, searchIndex);
+    if (!markerMatch) {
+      break;
+    }
+
+    const openTagStartIndex = lowerHtml.lastIndexOf("<div", markerMatch.index);
+    if (openTagStartIndex === -1) {
+      searchIndex = markerMatch.index + markerMatch.marker.length;
+      continue;
+    }
+
+    const openTagEndIndex = html.indexOf(">", markerMatch.index);
+    if (openTagEndIndex === -1) {
+      break;
+    }
+
+    const contentStartIndex = openTagEndIndex + 1;
+    const content = extractDivInnerHtml(html, contentStartIndex);
+    if (content !== null) {
+      containers.push(content);
+    }
+
+    searchIndex = contentStartIndex;
+  }
+
+  return containers;
+};
+
+const findNearestLyricsContainerMarker = (
+  lowerHtml: string,
+  startIndex: number
+):
+  | {
+      index: number;
+      marker: (typeof LYRICS_CONTAINER_MARKERS)[number];
+    }
+  | undefined => {
+  let nearestIndex = Number.POSITIVE_INFINITY;
+  let nearestMarker: (typeof LYRICS_CONTAINER_MARKERS)[number] | undefined;
+
+  for (const marker of LYRICS_CONTAINER_MARKERS) {
+    const markerIndex = lowerHtml.indexOf(marker, startIndex);
+    if (markerIndex !== -1 && markerIndex < nearestIndex) {
+      nearestIndex = markerIndex;
+      nearestMarker = marker;
+    }
+  }
+
+  if (nearestMarker === undefined) {
+    return undefined;
+  }
+
+  return {
+    index: nearestIndex,
+    marker: nearestMarker,
+  };
+};
+
+const extractDivInnerHtml = (html: string, contentStartIndex: number): string | null => {
+  const lowerHtml = html.toLowerCase();
+  let cursor = contentStartIndex;
+  let depth = 1;
+
+  while (cursor < html.length) {
+    const nextOpenTagIndex = lowerHtml.indexOf("<div", cursor);
+    const nextCloseTagIndex = lowerHtml.indexOf("</div", cursor);
+
+    if (nextCloseTagIndex === -1) {
+      return null;
+    }
+
+    const hasOpenBeforeClose = nextOpenTagIndex !== -1 && nextOpenTagIndex < nextCloseTagIndex;
+
+    if (hasOpenBeforeClose) {
+      const openTagEndIndex = html.indexOf(">", nextOpenTagIndex);
+      if (openTagEndIndex === -1) {
+        return null;
+      }
+
+      const openTag = html.slice(nextOpenTagIndex, openTagEndIndex + 1);
+      if (!/\/\s*>$/.test(openTag)) {
+        depth++;
+      }
+
+      cursor = openTagEndIndex + 1;
+      continue;
+    }
+
+    const closeTagEndIndex = html.indexOf(">", nextCloseTagIndex);
+    if (closeTagEndIndex === -1) {
+      return null;
+    }
+
+    depth--;
+
+    if (depth === 0) {
+      return html.slice(contentStartIndex, nextCloseTagIndex);
+    }
+
+    cursor = closeTagEndIndex + 1;
   }
 
   return null;
@@ -304,7 +417,6 @@ const decodeHtmlEntities = (value: string): string =>
       case "amp":
         return "&";
       case "apos":
-      case "#39":
         return "'";
       case "gt":
         return ">";

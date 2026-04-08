@@ -23,7 +23,6 @@ export class LyricsOvhClient {
   async getLyricsForTrack(track: Track, options?: LyricsRequestOptions): Promise<LyricsResult> {
     for (const candidate of buildLyricsLookupCandidates(track, options)) {
       const endpoint = this.createLyricsEndpoint(candidate.artist, candidate.title);
-      console.log(endpoint);
       const response = await fetchWithTimeout(endpoint, {}, this.requestTimeoutMs);
 
       if (response.status === 404) {
