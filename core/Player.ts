@@ -1,5 +1,5 @@
 // core/Player.ts
-
+import type { LyricsClient } from "../lyrics/LyricsClient";
 import type { Rest } from "../rest/Rest";
 import {
   BASSBOOST_FILTERS,
@@ -12,7 +12,14 @@ import { Queue, type QueueRemoveDuplicateOptions } from "../structures/Queue";
 import type { SearchResult } from "../structures/SearchResult";
 import { toSearchResult } from "../structures/SearchResult";
 import type { Track } from "../structures/Track";
-import type { Filters, PlayerState, PlayerUpdatePayload, SearchProvider } from "../types";
+import type {
+  Filters,
+  LyricsRequestOptions,
+  LyricsResult,
+  PlayerState,
+  PlayerUpdatePayload,
+  SearchProvider,
+} from "../types";
 import type { VoiceConnectOptions } from "./Node";
 
 const MAX_VOLUME = 1000;
@@ -126,6 +133,7 @@ export interface PlayerNodeAdapter {
   disconnectVoice?: (guildId: string) => Promise<void>;
   emitPlayerEvent?: (event: PlayerActionEvent) => void;
   getVoicePayload?: (guildId: string) => NonNullable<PlayerUpdatePayload["voice"]> | undefined;
+  readonly lyricsClient?: LyricsClient;
   readonly rest: Pick<Rest, "loadTracks" | "search" | "updatePlayer">;
   readonly sessionId: string | null;
   transformSearchResult?: (
@@ -518,6 +526,25 @@ export class Player {
 
   getQueue(): Track[] {
     return this.queue.toArray();
+  }
+
+  async getLyricsFor(track: Track, options?: LyricsRequestOptions): Promise<LyricsResult> {
+    if (!this.node.lyricsClient) {
+      return {
+        status: "unavailable",
+        reason: "provider_unavailable",
+      };
+    }
+
+    return this.node.lyricsClient.getLyricsForTrack(track, options);
+  }
+
+  async getLyrics(options?: LyricsRequestOptions): Promise<LyricsResult> {
+    if (!this.current) {
+      return { status: "no_track" };
+    }
+
+    return this.getLyricsFor(this.current, options);
   }
 
   async seek(positionMs: number): Promise<void> {

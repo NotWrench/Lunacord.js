@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
 import type { PlayerNodeAdapter } from "../core/Player";
 import { Player } from "../core/Player";
+import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Filter } from "../structures/Filter";
 import { Queue } from "../structures/Queue";
 import type { SearchResult } from "../structures/SearchResult";
@@ -42,7 +43,7 @@ const MOCK_RAW_TRACK_2: RawTrack = {
   },
 };
 
-const createMockNode = (): PlayerNodeAdapter => {
+const createMockNode = (): MockPlayerNode => {
   const updatePlayer = mock(() => Promise.resolve());
   const search = mock(
     (query: string, provider?: SearchProvider): Promise<LoadResult> =>
@@ -51,8 +52,25 @@ const createMockNode = (): PlayerNodeAdapter => {
         data: [MOCK_RAW_TRACK_2],
       })
   );
+  const getLyricsForTrack = mock(() =>
+    Promise.resolve({
+      status: "found" as const,
+      lyrics: {
+        title: "Never Gonna Give You Up",
+        artist: "Rick Astley",
+        url: "https://genius.com/Rick-astley-never-gonna-give-you-up-lyrics",
+        lyricsText: "Never gonna give you up",
+        albumArtUrl: null,
+        releaseDate: null,
+        geniusId: 42,
+      },
+    })
+  );
 
   return {
+    lyricsClient: {
+      getLyricsForTrack,
+    } as unknown as LyricsClient,
     sessionId: "test-session",
     rest: {
       loadTracks: mock(() =>
@@ -66,6 +84,10 @@ const createMockNode = (): PlayerNodeAdapter => {
     },
   };
 };
+
+interface MockPlayerNode extends PlayerNodeAdapter {
+  readonly lyricsClient?: LyricsClient;
+}
 
 const getMockEvents = (fn: ReturnType<typeof mock>): unknown[] =>
   (fn.mock.calls as Array<[unknown?]>).map((call) => call[0]);
@@ -89,7 +111,7 @@ const isPlayerSkipEvent = (event: unknown): event is PlayerSkipEvent =>
 
 describe("Player", () => {
   let player: Player;
-  let mockNode: PlayerNodeAdapter;
+  let mockNode: MockPlayerNode;
   let track: Track;
   let track2: Track;
 
@@ -885,6 +907,50 @@ describe("Player", () => {
       expect(player.current).toBeNull();
       expect(player.queue.isEmpty).toBe(true);
       expect(mockNode.rest.updatePlayer).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("lyrics", () => {
+    it("should return no_track when nothing is playing", async () => {
+      await expect(player.getLyrics()).resolves.toEqual({
+        status: "no_track",
+      });
+    });
+
+    it("should fetch lyrics for a specific track", async () => {
+      const result = await player.getLyricsFor(track, {
+        query: "Rick Astley Never Gonna Give You Up",
+      });
+
+      expect(result.status).toBe("found");
+      expect(mockNode.lyricsClient?.getLyricsForTrack).toHaveBeenCalledWith(track, {
+        query: "Rick Astley Never Gonna Give You Up",
+      });
+    });
+
+    it("should gracefully return unavailable when the node adapter has no lyrics client", async () => {
+      const nodeWithoutLyrics = createMockNode();
+      const playerWithoutLyrics = new Player("guild-456", {
+        ...nodeWithoutLyrics,
+        lyricsClient: undefined,
+      });
+      playerWithoutLyrics.current = track;
+
+      await expect(playerWithoutLyrics.getLyrics()).resolves.toEqual({
+        status: "unavailable",
+        reason: "provider_unavailable",
+      });
+    });
+
+    it("should delegate current-track lyrics lookups through the lyrics client", async () => {
+      player.current = track;
+
+      const result = await player.getLyrics({ query: "Never Gonna Give You Up lyrics" });
+
+      expect(result.status).toBe("found");
+      expect(mockNode.lyricsClient?.getLyricsForTrack).toHaveBeenCalledWith(track, {
+        query: "Never Gonna Give You Up lyrics",
+      });
     });
   });
 });

@@ -2,6 +2,10 @@ import { Client, GatewayIntentBits } from "discord.js";
 import { Lunacord, SearchProvider } from "../index";
 
 const TOKEN = process.env.DISCORD_TOKEN;
+const GENIUS_CLIENT_ID = process.env.GENIUS_CLIENT_ID ?? process.env.GENIUS_API_CLIENT_ID;
+const GENIUS_CLIENT_SECRET =
+  process.env.GENIUS_CLIENT_SECRET ?? process.env.GENIUS_API_CLIENT_SECRET;
+const GENIUS_ACCESS_TOKEN = process.env.GENIUS_ACCESS_TOKEN ?? process.env.GENIUS_API_ACCESS_TOKEN;
 
 if (!TOKEN) {
   console.error("Please provide a DISCORD_TOKEN environment variable.");
@@ -46,6 +50,16 @@ client.on("clientReady", async () => {
     userId: client.user!.id,
     numShards: 1,
     clientName: "LunacordDemo",
+    lyrics:
+      GENIUS_CLIENT_ID && GENIUS_CLIENT_SECRET && GENIUS_ACCESS_TOKEN
+        ? {
+            genius: {
+              clientId: GENIUS_CLIENT_ID,
+              clientSecret: GENIUS_CLIENT_SECRET,
+              accessToken: GENIUS_ACCESS_TOKEN,
+            },
+          }
+        : undefined,
     nodeSelection: {
       type: "roundRobin",
     },
@@ -297,6 +311,60 @@ client.on("messageCreate", async (message) => {
     } catch (error) {
       console.error(error);
       await message.reply("Failed to seek the current track.");
+    }
+  }
+
+  if (command === "!lyrics") {
+    const player = lunacord.getPlayer(message.guild.id);
+    if (!player) {
+      await message.reply("Nothing is playing.");
+      return;
+    }
+
+    try {
+      const result = await player.getLyrics();
+
+      switch (result.status) {
+        case "found": {
+          const excerpt =
+            result.lyrics.lyricsText.length > 1_500
+              ? `${result.lyrics.lyricsText.slice(0, 1_497).trimEnd()}...`
+              : result.lyrics.lyricsText;
+          await message.reply(
+            `Lyrics for **${result.lyrics.title}** by **${result.lyrics.artist}**\n${result.lyrics.url}\n\n${excerpt || "*No lyric text available.*"}`
+          );
+          break;
+        }
+        case "not_found":
+          await message.reply("Lyrics were not found for the current track.");
+          break;
+        case "unavailable":
+          switch (result.reason) {
+            case "invalid_token":
+              await message.reply(
+                "Lyrics fallback is configured with an invalid Genius access token."
+              );
+              break;
+            case "rate_limited":
+              await message.reply(
+                "The lyrics services are rate limited right now. Try again shortly."
+              );
+              break;
+            default:
+              await message.reply(
+                "Lyrics are currently unavailable. `lyrics.ovh` is used first, with Genius as optional fallback."
+              );
+              break;
+          }
+          break;
+        case "no_track":
+        default:
+          await message.reply("Nothing is currently playing.");
+          break;
+      }
+    } catch (error) {
+      console.error(error);
+      await message.reply("Failed to fetch lyrics.");
     }
   }
 

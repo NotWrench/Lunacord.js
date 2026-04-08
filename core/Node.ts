@@ -1,5 +1,6 @@
 // core/Node.ts
 
+import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Rest } from "../rest/Rest";
 import type { SearchResult } from "../structures/SearchResult";
 import { Track } from "../structures/Track";
@@ -91,6 +92,7 @@ export interface NodeOptions {
   host: string;
   id?: string;
   initialReconnectDelayMs?: number;
+  lyricsClient?: LyricsClient;
   maxReconnectAttempts?: number;
   maxReconnectDelayMs?: number;
   numShards: number;
@@ -307,6 +309,10 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
   get connected(): boolean {
     return this.sessionId !== null;
+  }
+
+  get lyricsClient(): LyricsClient | undefined {
+    return this.options.lyricsClient;
   }
 
   handleVoicePacket(packet: unknown): void {

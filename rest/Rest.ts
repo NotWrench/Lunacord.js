@@ -60,10 +60,12 @@ export interface RestRequestPatch {
   path?: string;
 }
 
+type HttpResponse = Awaited<ReturnType<typeof fetch>>;
+
 export interface RestResponseContext {
   data: unknown;
   request: RestRequestContext;
-  response: Response;
+  response: HttpResponse;
 }
 
 export interface RestErrorContext {
@@ -105,7 +107,7 @@ export class Rest {
     this.retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   }
 
-  private async parseErrorMessage(response: Response): Promise<string> {
+  private async parseErrorMessage(response: HttpResponse): Promise<string> {
     try {
       const errorBody = (await response.json()) as { message?: string };
       if (errorBody.message) {
@@ -161,7 +163,7 @@ export class Rest {
     method: string,
     path: string,
     body?: unknown
-  ): Promise<{ request: RestRequestContext; response: Response }> {
+  ): Promise<{ request: RestRequestContext; response: HttpResponse }> {
     let attempt = 0;
 
     while (true) {
@@ -253,7 +255,7 @@ export class Rest {
 
   private async readJsonResponse(
     request: RestRequestContext,
-    response: Response
+    response: HttpResponse
   ): Promise<unknown> {
     let data: unknown = await response.json();
 
@@ -272,7 +274,10 @@ export class Rest {
     return data;
   }
 
-  private async readTextResponse(request: RestRequestContext, response: Response): Promise<string> {
+  private async readTextResponse(
+    request: RestRequestContext,
+    response: HttpResponse
+  ): Promise<string> {
     let data: unknown = await response.text();
 
     for (const middleware of this.middlewares) {

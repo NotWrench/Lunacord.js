@@ -57,6 +57,59 @@ export const TrackSchema = z.object({
 
 export type RawTrack = z.infer<typeof TrackSchema>;
 
+// --- Lyrics ---
+
+export interface GeniusOptions {
+  accessToken: string;
+  clientId: string;
+  clientSecret: string;
+  requestTimeoutMs?: number;
+}
+
+export interface LyricsOptions {
+  genius?: GeniusOptions;
+  requestTimeoutMs?: number;
+}
+
+export const LyricsSchema = z.object({
+  title: z.string(),
+  artist: z.string(),
+  url: z.string(),
+  lyricsText: z.string(),
+  albumArtUrl: z.string().nullable().optional(),
+  releaseDate: z.string().nullable().optional(),
+  geniusId: z.number().optional(),
+});
+
+export type Lyrics = z.infer<typeof LyricsSchema>;
+
+export interface LyricsRequestOptions {
+  query?: string;
+}
+
+export type LyricsUnavailableReason =
+  | "invalid_token"
+  | "missing_credentials"
+  | "provider_unavailable"
+  | "rate_limited"
+  | "unsupported";
+
+export type LyricsResult =
+  | {
+      lyrics: Lyrics;
+      status: "found";
+    }
+  | {
+      status: "not_found";
+    }
+  | {
+      status: "no_track";
+    }
+  | {
+      reason: LyricsUnavailableReason;
+      status: "unavailable";
+    };
+
 // --- Playlist Info ---
 
 export const PlaylistInfoSchema = z.object({
