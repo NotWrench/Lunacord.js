@@ -2,11 +2,11 @@
 
 Lunacord is a manager-first Lavalink client for Bun and TypeScript. Create one `Lunacord` instance, let it manage your nodes and players, and use high-level helpers for search, queueing, filters, and lyrics.
 
-## Genius Lyrics
+## Lyrics
 
-Lyrics are fetched through the Genius API and Genius song pages, not through a Lavalink plugin.
+Lyrics are fetched from `lyrics.ovh` by default. Genius is an optional fallback provider that improves coverage when `lyrics.ovh` misses or is temporarily unavailable.
 
-Configure Genius in your `Lunacord` instance:
+Configure optional Genius fallback in your `Lunacord` instance:
 
 ```ts
 import { Lunacord } from "lunacord";
@@ -22,21 +22,24 @@ const lunacord = new Lunacord({
     },
   ],
   lyrics: {
-    genius: {
-      clientId: process.env.GENIUS_CLIENT_ID!,
-      clientSecret: process.env.GENIUS_CLIENT_SECRET!,
-      accessToken: process.env.GENIUS_ACCESS_TOKEN!,
-    },
+    genius: process.env.GENIUS_ACCESS_TOKEN
+      ? {
+          clientId: process.env.GENIUS_CLIENT_ID!,
+          clientSecret: process.env.GENIUS_CLIENT_SECRET!,
+          accessToken: process.env.GENIUS_ACCESS_TOKEN!,
+        }
+      : undefined,
   },
 });
 ```
 
 Notes:
 
-- `clientId`, `clientSecret`, and `accessToken` are accepted by the library.
-- The access token is required for requests in this version.
+- `lyrics.ovh` requires no configuration and is always attempted first.
+- `clientId`, `clientSecret`, and `accessToken` are accepted for optional Genius fallback.
+- The access token is required for Genius requests in this version.
 - OAuth token exchange is not implemented in the library yet.
-- If Genius is not configured, lyrics APIs return a graceful `unavailable` result instead of crashing.
+- If Genius is not configured, lyrics APIs still work through `lyrics.ovh` and degrade gracefully.
 
 ### Player API
 

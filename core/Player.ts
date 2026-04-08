@@ -1,6 +1,5 @@
 // core/Player.ts
-
-import type { GeniusClient } from "../lyrics/GeniusClient";
+import type { LyricsClient } from "../lyrics/LyricsClient";
 import type { Rest } from "../rest/Rest";
 import {
   BASSBOOST_FILTERS,
@@ -134,7 +133,7 @@ export interface PlayerNodeAdapter {
   disconnectVoice?: (guildId: string) => Promise<void>;
   emitPlayerEvent?: (event: PlayerActionEvent) => void;
   getVoicePayload?: (guildId: string) => NonNullable<PlayerUpdatePayload["voice"]> | undefined;
-  readonly lyricsClient?: GeniusClient;
+  readonly lyricsClient?: LyricsClient;
   readonly rest: Pick<Rest, "loadTracks" | "search" | "updatePlayer">;
   readonly sessionId: string | null;
   transformSearchResult?: (
@@ -533,7 +532,7 @@ export class Player {
     if (!this.node.lyricsClient) {
       return {
         status: "unavailable",
-        reason: "missing_credentials",
+        reason: "provider_unavailable",
       };
     }
 

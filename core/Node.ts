@@ -1,6 +1,6 @@
 // core/Node.ts
 
-import type { GeniusClient } from "../lyrics/GeniusClient";
+import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Rest } from "../rest/Rest";
 import type { SearchResult } from "../structures/SearchResult";
 import { Track } from "../structures/Track";
@@ -92,7 +92,7 @@ export interface NodeOptions {
   host: string;
   id?: string;
   initialReconnectDelayMs?: number;
-  lyricsClient?: GeniusClient;
+  lyricsClient?: LyricsClient;
   maxReconnectAttempts?: number;
   maxReconnectDelayMs?: number;
   numShards: number;
@@ -311,7 +311,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     return this.sessionId !== null;
   }
 
-  get lyricsClient(): GeniusClient | undefined {
+  get lyricsClient(): LyricsClient | undefined {
     return this.options.lyricsClient;
   }
 

@@ -7,9 +7,15 @@ import type {
   LyricsResult,
   LyricsUnavailableReason,
 } from "../types";
+import {
+  buildGeniusQueries,
+  DEFAULT_LYRICS_REQUEST_TIMEOUT_MS,
+  fetchWithTimeout,
+  normalizeForComparison,
+  scoreSimilarity,
+} from "./shared";
 
 const GENIUS_API_BASE_URL = "https://api.genius.com";
-const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const MINIMUM_MATCH_SCORE = 0.35;
 const LYRICS_CONTAINER_REGEX = /<div[^>]*data-lyrics-container="true"[^>]*>([\s\S]*?)<\/div>/gi;
 const LEGACY_LYRICS_REGEX = /<div[^>]*class="lyrics"[^>]*>([\s\S]*?)<\/div>/i;
@@ -23,12 +29,6 @@ const LEADING_TRANSLATIONS_LINE_REGEX =
   /^(translations?|contributors?|english|espa[ñn]ol|portugu[eê]s|fran[cç]ais|deutsch|italiano|dansk|cymraeg|русский|українська|ελληνικά)\b/i;
 const SECTION_HEADER_REGEX = /^\[[^\]]+]$/;
 const TRAILING_EMBED_LINE_REGEX = /^\d*\s*embed$/i;
-const BRACKETED_CONTENT_REGEX = /\[[^\]]*]|\([^)]*\)|\{[^}]*}/g;
-const TITLE_NOISE_REGEX =
-  /\b(official( music)? video|official audio|lyrics?|audio|video|hd|4k|visualizer)\b/gi;
-const SEPARATOR_REGEX = /[-–—:|]/g;
-const NON_ALPHANUMERIC_REGEX = /[^a-z0-9\s]/g;
-const MULTISPACE_REGEX = /\s+/g;
 const HTML_ENTITY_REGEX = /&(#x?[0-9a-f]+|[a-z]+);/gi;
 
 const GeniusSearchHitSchema = z.object({
@@ -59,9 +59,11 @@ type GeniusSearchOutcome =
 
 export class GeniusClient {
   private readonly options: GeniusOptions | undefined;
+  private readonly requestTimeoutMs: number;
 
   constructor(options?: GeniusOptions) {
     this.options = options;
+    this.requestTimeoutMs = options?.requestTimeoutMs ?? DEFAULT_LYRICS_REQUEST_TIMEOUT_MS;
   }
 
   isConfigured(): boolean {
@@ -73,7 +75,7 @@ export class GeniusClient {
       return unavailable("missing_credentials");
     }
 
-    const queries = this.buildQueries(track, options);
+    const queries = buildGeniusQueries(track, options);
 
     for (const query of queries) {
       const searchResult = await this.search(query);
@@ -114,25 +116,15 @@ export class GeniusClient {
     };
   }
 
-  private buildQueries(track: Track, options?: LyricsRequestOptions): string[] {
-    if (options?.query) {
-      return [options.query.trim()].filter((query) => query.length > 0);
-    }
-
-    const primaryQuery =
-      `${sanitizeQueryPart(track.title)} ${sanitizeQueryPart(track.author)}`.trim();
-    const fallbackQuery = sanitizeQueryPart(track.title);
-    return [...new Set([primaryQuery, fallbackQuery].filter((query) => query.length > 0))];
-  }
-
   private async search(query: string): Promise<GeniusSearchOutcome> {
-    const response = await this.fetchWithTimeout(
+    const response = await fetchWithTimeout(
       `${GENIUS_API_BASE_URL}/search?q=${encodeURIComponent(query)}`,
       {
         headers: {
           Authorization: `Bearer ${this.options!.accessToken}`,
         },
-      }
+      },
+      this.requestTimeoutMs
     );
 
     if (!response.ok) {
@@ -191,7 +183,7 @@ export class GeniusClient {
       }
     | LyricsResult
   > {
-    const response = await this.fetchWithTimeout(url, {});
+    const response = await fetchWithTimeout(url, {}, this.requestTimeoutMs);
 
     if (!response.ok) {
       return unavailable(this.getUnavailableReason(response.status));
@@ -212,27 +204,6 @@ export class GeniusClient {
     return {
       value: lyricsText,
     };
-  }
-
-  private async fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, this.options?.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
-
-    try {
-      return await fetch(input, {
-        ...init,
-        signal: controller.signal,
-      });
-    } catch {
-      return new Response(null, {
-        status: 503,
-        statusText: "Provider unavailable",
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
   }
 
   private getUnavailableReason(status: number): LyricsUnavailableReason {
@@ -347,46 +318,6 @@ const decodeHtmlEntities = (value: string): string =>
         return match;
     }
   });
-
-const sanitizeQueryPart = (value: string): string =>
-  value.replace(BRACKETED_CONTENT_REGEX, " ").replace(TITLE_NOISE_REGEX, " ").trim();
-
-const normalizeForComparison = (value: string): string =>
-  sanitizeQueryPart(value)
-    .replace(SEPARATOR_REGEX, " ")
-    .replace(NON_ALPHANUMERIC_REGEX, " ")
-    .replace(MULTISPACE_REGEX, " ")
-    .trim()
-    .toLowerCase();
-
-const scoreSimilarity = (left: string, right: string): number => {
-  if (!left || !right) {
-    return 0;
-  }
-
-  if (left === right) {
-    return 1;
-  }
-
-  if (left.includes(right) || right.includes(left)) {
-    return 0.9;
-  }
-
-  const leftTokens = new Set(left.split(" ").filter(Boolean));
-  const rightTokens = new Set(right.split(" ").filter(Boolean));
-  if (leftTokens.size === 0 || rightTokens.size === 0) {
-    return 0;
-  }
-
-  let overlap = 0;
-  for (const token of leftTokens) {
-    if (rightTokens.has(token)) {
-      overlap++;
-    }
-  }
-
-  return overlap / Math.max(leftTokens.size, rightTokens.size);
-};
 
 const unavailable = (reason: LyricsUnavailableReason): LyricsResult => ({
   status: "unavailable",

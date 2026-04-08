@@ -12,6 +12,8 @@ export {
 export { Node } from "./core/Node";
 export { Player } from "./core/Player";
 export { GeniusClient } from "./lyrics/GeniusClient";
+export { LyricsClient } from "./lyrics/LyricsClient";
+export { LyricsOvhClient } from "./lyrics/LyricsOvhClient";
 // Errors
 export {
   LavalinkRestError,
@@ -42,6 +44,7 @@ export type {
   InfoResponse,
   LoadResult,
   Lyrics,
+  LyricsOptions,
   LyricsRequestOptions,
   LyricsResult,
   LyricsUnavailableReason,

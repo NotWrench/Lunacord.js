@@ -66,6 +66,11 @@ export interface GeniusOptions {
   requestTimeoutMs?: number;
 }
 
+export interface LyricsOptions {
+  genius?: GeniusOptions;
+  requestTimeoutMs?: number;
+}
+
 export const LyricsSchema = z.object({
   title: z.string(),
   artist: z.string(),

@@ -340,19 +340,20 @@ client.on("messageCreate", async (message) => {
           break;
         case "unavailable":
           switch (result.reason) {
-            case "missing_credentials":
+            case "invalid_token":
               await message.reply(
-                "Genius lyrics are not configured. Set `GENIUS_CLIENT_ID`, `GENIUS_CLIENT_SECRET`, and `GENIUS_ACCESS_TOKEN`."
+                "Lyrics fallback is configured with an invalid Genius access token."
               );
               break;
-            case "invalid_token":
-              await message.reply("The configured Genius access token is invalid.");
-              break;
             case "rate_limited":
-              await message.reply("Genius rate limited the lyrics request. Try again shortly.");
+              await message.reply(
+                "The lyrics services are rate limited right now. Try again shortly."
+              );
               break;
             default:
-              await message.reply("Genius lyrics are currently unavailable.");
+              await message.reply(
+                "Lyrics are currently unavailable. `lyrics.ovh` is used first, with Genius as optional fallback."
+              );
               break;
           }
           break;

@@ -1,4 +1,4 @@
-import { GeniusClient } from "../lyrics/GeniusClient";
+import { LyricsClient } from "../lyrics/LyricsClient";
 import type {
   RestErrorContext,
   RestRequestContext,
@@ -6,7 +6,7 @@ import type {
   RestResponseContext,
 } from "../rest/Rest";
 import type { SearchResult } from "../structures/SearchResult";
-import type { GeniusOptions, LyricsRequestOptions, LyricsResult, SearchProvider } from "../types";
+import type { LyricsOptions, LyricsRequestOptions, LyricsResult, SearchProvider } from "../types";
 import { TypedEventEmitter } from "../utils/EventEmitter";
 import {
   type GatewayVoiceStatePayload,
@@ -82,9 +82,7 @@ export interface CreatePlayerOptions {
 export interface LunacordOptions {
   autoConnect?: boolean;
   clientName?: string;
-  lyrics?: {
-    genius?: GeniusOptions;
-  };
+  lyrics?: LyricsOptions;
   nodeSelection?: LunacordNodeSelectionStrategy;
   nodes: readonly LunacordNodeOptions[];
   numShards: number;
@@ -163,7 +161,7 @@ export interface LunacordPlugin {
 }
 
 export class Lunacord extends TypedEventEmitter<LunacordEvents> {
-  private readonly geniusClient: GeniusClient;
+  private readonly lyricsClient: LyricsClient;
   private readonly nodes = new Map<string, Node>();
   private readonly options: LunacordOptions;
   private readonly plugins: LunacordPlugin[] = [];
@@ -175,7 +173,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   constructor(options: LunacordOptions) {
     super();
     this.options = options;
-    this.geniusClient = new GeniusClient(options.lyrics?.genius);
+    this.lyricsClient = new LyricsClient(options.lyrics);
 
     for (const [index, nodeOptions] of options.nodes.entries()) {
       const id = nodeOptions.id ?? `node-${index + 1}`;
@@ -510,7 +508,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       sendGatewayPayload: this.options.sendGatewayPayload,
       timeout: this.options.timeout,
       userId: this.options.userId,
-      lyricsClient: this.geniusClient,
+      lyricsClient: this.lyricsClient,
     };
   }
 

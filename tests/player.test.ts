@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
 import type { PlayerNodeAdapter } from "../core/Player";
 import { Player } from "../core/Player";
-import type { GeniusClient } from "../lyrics/GeniusClient";
+import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Filter } from "../structures/Filter";
 import { Queue } from "../structures/Queue";
 import type { SearchResult } from "../structures/SearchResult";
@@ -70,7 +70,7 @@ const createMockNode = (): MockPlayerNode => {
   return {
     lyricsClient: {
       getLyricsForTrack,
-    } as unknown as GeniusClient,
+    } as unknown as LyricsClient,
     sessionId: "test-session",
     rest: {
       loadTracks: mock(() =>
@@ -86,7 +86,7 @@ const createMockNode = (): MockPlayerNode => {
 };
 
 interface MockPlayerNode extends PlayerNodeAdapter {
-  readonly lyricsClient?: GeniusClient;
+  readonly lyricsClient?: LyricsClient;
 }
 
 const getMockEvents = (fn: ReturnType<typeof mock>): unknown[] =>
@@ -928,7 +928,7 @@ describe("Player", () => {
       });
     });
 
-    it("should gracefully return unavailable when Genius is not configured", async () => {
+    it("should gracefully return unavailable when the node adapter has no lyrics client", async () => {
       const nodeWithoutLyrics = createMockNode();
       const playerWithoutLyrics = new Player("guild-456", {
         ...nodeWithoutLyrics,
@@ -938,11 +938,11 @@ describe("Player", () => {
 
       await expect(playerWithoutLyrics.getLyrics()).resolves.toEqual({
         status: "unavailable",
-        reason: "missing_credentials",
+        reason: "provider_unavailable",
       });
     });
 
-    it("should delegate current-track lyrics lookups through the Genius client", async () => {
+    it("should delegate current-track lyrics lookups through the lyrics client", async () => {
       player.current = track;
 
       const result = await player.getLyrics({ query: "Never Gonna Give You Up lyrics" });
