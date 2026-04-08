@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
 import { Lunacord } from "../core/Lunacord";
 import { Node } from "../core/Node";
+import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Track } from "../structures/Track";
 import { type LoadResult, type RawTrack, SearchProvider } from "../types";
 
@@ -28,6 +29,9 @@ const createReadyPayload = (sessionId: string) => ({
   resumed: false,
   sessionId,
 });
+
+const getInternalLyricsClient = (lunacord: Lunacord): LyricsClient =>
+  (lunacord as unknown as { lyricsClient: LyricsClient }).lyricsClient;
 
 const MOCK_RAW_TRACK: RawTrack = {
   encoded: "QAABJAMACk5ldmVyIEdvbm5h...",
@@ -692,6 +696,59 @@ describe("Lunacord", () => {
       status: "found",
     });
     expect(player.getLyrics).toHaveBeenCalledTimes(1);
+  });
+
+  it("should mark tracks active for lyrics cache on playback events", () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
+    const lyricsClient = getInternalLyricsClient(lunacord);
+    const track = new Track(MOCK_RAW_TRACK);
+    const player = node.createPlayer("guild-lyrics-cache");
+    const markTrackActiveSpy = spyOn(lyricsClient, "markTrackActive");
+
+    node.emit("playerPlay", {
+      guildId: "guild-lyrics-cache",
+      track,
+      source: "direct",
+    });
+    node.emit("trackStart", { player, track });
+
+    expect(markTrackActiveSpy).toHaveBeenCalledTimes(2);
+    expect(markTrackActiveSpy).toHaveBeenNthCalledWith(1, "guild-lyrics-cache", track);
+    expect(markTrackActiveSpy).toHaveBeenNthCalledWith(2, "guild-lyrics-cache", track);
+  });
+
+  it("should mark tracks inactive for lyrics cache on end and teardown events", () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
+    const lyricsClient = getInternalLyricsClient(lunacord);
+    const track = new Track(MOCK_RAW_TRACK);
+    const player = node.createPlayer("guild-lyrics-cache");
+    const markTrackInactiveSpy = spyOn(lyricsClient, "markTrackInactive");
+
+    node.emit("trackEnd", {
+      player,
+      track,
+      reason: "finished",
+    });
+    node.emit("playerStop", {
+      guildId: "guild-lyrics-cache",
+      destroyPlayer: false,
+      disconnectVoice: false,
+    });
+    node.emit("playerDisconnect", {
+      guildId: "guild-lyrics-cache",
+      reason: "manual",
+    });
+    node.emit("playerDestroy", {
+      guildId: "guild-lyrics-cache",
+    });
+
+    expect(markTrackInactiveSpy).toHaveBeenCalledTimes(4);
+    expect(markTrackInactiveSpy).toHaveBeenNthCalledWith(1, "guild-lyrics-cache", track);
+    expect(markTrackInactiveSpy).toHaveBeenNthCalledWith(2, "guild-lyrics-cache");
+    expect(markTrackInactiveSpy).toHaveBeenNthCalledWith(3, "guild-lyrics-cache");
+    expect(markTrackInactiveSpy).toHaveBeenNthCalledWith(4, "guild-lyrics-cache");
   });
 
   it("should wire Genius config into created players", async () => {

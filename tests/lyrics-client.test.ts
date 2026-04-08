@@ -234,4 +234,91 @@ describe("LyricsClient", () => {
       reason: "rate_limited",
     });
   });
+
+  it("should cache results for active tracks", async () => {
+    const fetchMock = mock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ lyrics: "Cached lyrics" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = new LyricsClient();
+    client.markTrackActive("guild-a", track);
+
+    await expect(client.getLyricsForTrack(track)).resolves.toMatchObject({
+      status: "found",
+      lyrics: {
+        lyricsText: "Cached lyrics",
+      },
+    });
+
+    await expect(client.getLyricsForTrack(track)).resolves.toMatchObject({
+      status: "found",
+      lyrics: {
+        lyricsText: "Cached lyrics",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("should keep cache while at least one guild is active and evict after the last guild ends", async () => {
+    const fetchMock = mock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ lyrics: "Shared cache lyrics" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = new LyricsClient();
+    client.markTrackActive("guild-a", track);
+    client.markTrackActive("guild-b", track);
+
+    await client.getLyricsForTrack(track);
+    await client.getLyricsForTrack(track);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    client.markTrackInactive("guild-a");
+    await client.getLyricsForTrack(track);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    client.markTrackInactive("guild-b");
+    await client.getLyricsForTrack(track);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("should dedupe concurrent requests for the same active track", async () => {
+    let callCount = 0;
+    globalThis.fetch = mock(() => {
+      callCount += 1;
+      return new Promise<Response>((resolve) => {
+        setTimeout(() => {
+          resolve(
+            new Response(JSON.stringify({ lyrics: "Concurrent lyrics" }), {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            })
+          );
+        }, 5);
+      });
+    }) as unknown as typeof fetch;
+
+    const client = new LyricsClient();
+    client.markTrackActive("guild-a", track);
+
+    const [first, second] = await Promise.all([
+      client.getLyricsForTrack(track),
+      client.getLyricsForTrack(track),
+    ]);
+
+    expect(first).toEqual(second);
+    expect(callCount).toBe(1);
+  });
 });

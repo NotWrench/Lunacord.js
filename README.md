@@ -40,6 +40,8 @@ Notes:
 - The access token is required for Genius requests in this version.
 - OAuth token exchange is not implemented in the library yet.
 - If Genius is not configured, lyrics APIs still work through `lyrics.ovh` and degrade gracefully.
+- Lyrics responses are cached in-memory globally per `Lunacord` instance and shared across guilds.
+- Cached entries are retained while at least one guild is actively playing that song, then evicted after the last active playback ends.
 
 ### Player API
 
