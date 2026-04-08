@@ -657,6 +657,64 @@ describe("Lunacord", () => {
     });
   });
 
+  it("should return no_track when lyrics are requested without a player", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+
+    await expect(lunacord.getLyrics("guild-lyrics")).resolves.toEqual({
+      status: "no_track",
+    });
+  });
+
+  it("should delegate lyrics requests to the managed player", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+
+    const player = lunacord.createPlayer("guild-lyrics-player");
+    player.getLyrics = mock(() =>
+      Promise.resolve({
+        status: "found" as const,
+        lyrics: {
+          title: "Never Gonna Give You Up",
+          artist: "Rick Astley",
+          url: "https://genius.com/Rick-astley-never-gonna-give-you-up-lyrics",
+          lyricsText: "Never gonna give you up",
+          albumArtUrl: null,
+          releaseDate: null,
+          geniusId: 42,
+        },
+      })
+    );
+
+    await expect(lunacord.getLyrics("guild-lyrics-player")).resolves.toMatchObject({
+      status: "found",
+    });
+    expect(player.getLyrics).toHaveBeenCalledTimes(1);
+  });
+
+  it("should wire Genius config into created players", async () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      lyrics: {
+        genius: {
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          accessToken: "access-token",
+        },
+      },
+    });
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+
+    lunacord.createPlayer("guild-genius");
+
+    expect(nodeA?.lyricsClient ?? nodeB?.lyricsClient).toBeDefined();
+  });
+
   it("should disconnect synchronously", () => {
     const lunacord = new Lunacord(BASE_OPTIONS);
 

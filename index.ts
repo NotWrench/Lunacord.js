@@ -11,6 +11,7 @@ export {
 } from "./core/Lunacord";
 export { Node } from "./core/Node";
 export { Player } from "./core/Player";
+export { GeniusClient } from "./lyrics/GeniusClient";
 // Errors
 export {
   LavalinkRestError,
@@ -37,8 +38,13 @@ export type {
   Exception,
   Filters,
   FrameStats,
+  GeniusOptions,
   InfoResponse,
   LoadResult,
+  Lyrics,
+  LyricsRequestOptions,
+  LyricsResult,
+  LyricsUnavailableReason,
   PlayerState,
   PlayerUpdate,
   PlayerUpdatePayload,
@@ -65,6 +71,7 @@ export {
   LoadResultSchema,
   LoadResultSearchSchema,
   LoadResultTrackSchema,
+  LyricsSchema,
   PlayerStateSchema,
   PlayerUpdateOpSchema,
   PlayerUpdatePayloadSchema,
