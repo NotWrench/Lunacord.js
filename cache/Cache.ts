@@ -25,8 +25,6 @@ export class Cache {
   }
 
   async delete(key: string): Promise<boolean> {
-    this.inFlight.delete(this.getStoreKey(key));
-
     try {
       return await this.store.delete(this.getStoreKey(key));
     } catch {

@@ -4,6 +4,9 @@ import { CacheManager } from "../cache/CacheManager";
 import { MemoryCacheStore } from "../cache/stores/MemoryCacheStore";
 import { NoopCacheStore } from "../cache/stores/NoopCacheStore";
 import type { CacheStore } from "../cache/types";
+import { buildTrackCacheKey } from "../cache/utils";
+import { Track } from "../structures/Track";
+import type { RawTrack } from "../types";
 
 describe("Cache", () => {
   it("should set, get, has, and delete values in memory store", async () => {
@@ -57,6 +60,34 @@ describe("Cache", () => {
     await expect(cache.get("key")).resolves.toBe("value");
   });
 
+  it("should keep wrap dedupe when resolver deletes the same key", async () => {
+    const cache = new Cache(new MemoryCacheStore(), "wrap-delete");
+    let unblockResolver: () => void = () => {};
+    const blocked = new Promise<void>((resolve) => {
+      unblockResolver = resolve;
+    });
+
+    let afterDelete: () => void = () => {};
+    const deleted = new Promise<void>((resolve) => {
+      afterDelete = resolve;
+    });
+
+    const resolver = mock(async () => {
+      await cache.delete("key");
+      afterDelete();
+      await blocked;
+      return "value";
+    });
+
+    const first = cache.wrap("key", resolver);
+    await deleted;
+    const second = cache.wrap("key", resolver);
+    unblockResolver();
+
+    await expect(Promise.all([first, second])).resolves.toEqual(["value", "value"]);
+    expect(resolver).toHaveBeenCalledTimes(1);
+  });
+
   it("should support getOrSet", async () => {
     const cache = new Cache(new MemoryCacheStore(), "getorset");
     const resolver = mock(() => Promise.resolve("value"));
@@ -108,5 +139,76 @@ describe("CacheManager", () => {
     });
 
     expect(manager.getStore()).toBeInstanceOf(NoopCacheStore);
+  });
+});
+
+describe("MemoryCacheStore", () => {
+  it("should unref cleanup timer when available", () => {
+    const originalSetInterval = globalThis.setInterval;
+    const originalClearInterval = globalThis.clearInterval;
+    const unref = mock(() => undefined);
+    const timer = {
+      unref,
+    } as unknown as ReturnType<typeof setInterval>;
+
+    globalThis.setInterval = mock(() => timer) as unknown as typeof setInterval;
+    globalThis.clearInterval = mock(() => undefined) as unknown as typeof clearInterval;
+
+    const store = new MemoryCacheStore({ cleanupIntervalMs: 10 });
+    expect(unref).toHaveBeenCalledTimes(1);
+
+    store.stop();
+    globalThis.setInterval = originalSetInterval;
+    globalThis.clearInterval = originalClearInterval;
+  });
+});
+
+describe("buildTrackCacheKey", () => {
+  const createTrack = (overrides: Partial<RawTrack["info"]>): Track =>
+    new Track({
+      encoded: "encoded-track",
+      info: {
+        identifier: "identifier",
+        isSeekable: true,
+        author: "Artist",
+        length: 1_000,
+        isStream: false,
+        position: 0,
+        title: "Song",
+        uri: "https://example.com",
+        artworkUrl: null,
+        isrc: null,
+        sourceName: "youtube",
+        ...overrides,
+      },
+    });
+
+  it("should use meta fallback only when both artist and title are available", () => {
+    const track = createTrack({
+      identifier: "",
+      sourceName: "",
+      author: "alan walker",
+      title: "faded",
+    });
+
+    expect(buildTrackCacheKey(track)).toBe("meta:alan walker:faded");
+  });
+
+  it("should fall back to encoded key when artist or title is missing", () => {
+    const missingArtist = createTrack({
+      identifier: "",
+      sourceName: "",
+      author: "",
+      title: "Faded",
+    });
+    const missingTitle = createTrack({
+      identifier: "",
+      sourceName: "",
+      author: "Alan Walker",
+      title: "",
+    });
+
+    expect(buildTrackCacheKey(missingArtist)).toBe("encoded:encoded-track");
+    expect(buildTrackCacheKey(missingTitle)).toBe("encoded:encoded-track");
   });
 });

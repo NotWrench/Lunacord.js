@@ -15,7 +15,7 @@ export const buildTrackCacheKey = (track: Track): string => {
 
   const normalizedArtist = normalizeForComparison(track.author);
   const normalizedTitle = normalizeForComparison(track.title);
-  if (normalizedArtist || normalizedTitle) {
+  if (normalizedArtist && normalizedTitle) {
     return `meta:${normalizedArtist}:${normalizedTitle}`;
   }
 

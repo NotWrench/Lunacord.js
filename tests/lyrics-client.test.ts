@@ -276,6 +276,40 @@ describe("LyricsClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("should not cache unavailable results for active tracks", async () => {
+    let requestCount = 0;
+    globalThis.fetch = mock(() => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        return Promise.resolve(new Response(null, { status: 503 }));
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify({ lyrics: "Recovered lyrics" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    }) as unknown as typeof fetch;
+
+    const client = createClient();
+    client.markTrackActive("guild-a", track);
+
+    await expect(client.getLyricsForTrack(track)).resolves.toEqual({
+      status: "unavailable",
+      reason: "provider_unavailable",
+    });
+
+    await expect(client.getLyricsForTrack(track)).resolves.toMatchObject({
+      status: "found",
+      lyrics: {
+        lyricsText: "Recovered lyrics",
+      },
+    });
+
+    expect(requestCount).toBe(2);
+  });
+
   it("should keep cache while at least one guild is active and evict after the last guild ends", async () => {
     const fetchMock = mock(() =>
       Promise.resolve(

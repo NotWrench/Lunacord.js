@@ -9,9 +9,18 @@ export class MemoryCacheStore {
     this.cleanupIntervalMs = options?.cleanupIntervalMs;
 
     if (this.cleanupIntervalMs && this.cleanupIntervalMs > 0) {
-      this.sweepTimer = setInterval(() => {
+      const timer = setInterval(() => {
         this.sweepExpiredEntries();
       }, this.cleanupIntervalMs);
+
+      if (typeof timer === "object" && timer !== null && "unref" in timer) {
+        const maybeUnref = timer.unref;
+        if (typeof maybeUnref === "function") {
+          maybeUnref.call(timer);
+        }
+      }
+
+      this.sweepTimer = timer;
     }
   }
 

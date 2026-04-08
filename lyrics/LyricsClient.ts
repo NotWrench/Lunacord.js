@@ -18,6 +18,7 @@ export class LyricsClient implements TrackLyricsClient {
   private readonly cacheKeyByGuildId = new Map<string, string>();
   private readonly cache?: Cache;
   private readonly geniusClient: GeniusClient;
+  private readonly inFlightRequests = new Map<string, Promise<LyricsResult>>();
   private readonly lyricsOvhClient: LyricsOvhClient;
 
   constructor(
@@ -84,14 +85,25 @@ export class LyricsClient implements TrackLyricsClient {
       return this.fetchLyrics(track, options);
     }
 
-    return this.cache.wrap(cacheKey, async () => {
-      const result = await this.fetchLyrics(track, options);
-      if (!this.activeGuildsByCacheKey.has(cacheKey)) {
-        await this.cache?.delete(cacheKey);
-      }
+    const inFlightRequest = this.inFlightRequests.get(cacheKey);
+    if (inFlightRequest) {
+      return inFlightRequest;
+    }
 
-      return result;
-    });
+    const request = this.fetchLyrics(track, options)
+      .then(async (result) => {
+        if (this.activeGuildsByCacheKey.has(cacheKey) && this.shouldCacheResult(result)) {
+          await this.cache?.set(cacheKey, result);
+        }
+
+        return result;
+      })
+      .finally(() => {
+        this.inFlightRequests.delete(cacheKey);
+      });
+
+    this.inFlightRequests.set(cacheKey, request);
+    return request;
   }
 
   private detachGuildFromCacheKey(guildId: string, cacheKey: string): void {
@@ -137,6 +149,10 @@ export class LyricsClient implements TrackLyricsClient {
     }
 
     return fallbackResult;
+  }
+
+  private shouldCacheResult(result: LyricsResult): boolean {
+    return result.status !== "unavailable";
   }
 
   private getTrackCacheKey(track: Track): string {
