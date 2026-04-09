@@ -16,10 +16,11 @@ export class RedisCacheStore {
     }
 
     const pattern = `${prefix}:*`;
-    for await (const keys of this.client.scanIterator({
+    for await (const scanned of this.client.scanIterator({
       MATCH: pattern,
       COUNT: 1000,
     })) {
+      const keys = Array.isArray(scanned) ? scanned : [scanned];
       if (keys.length > 0) {
         await this.client.del(keys);
       }

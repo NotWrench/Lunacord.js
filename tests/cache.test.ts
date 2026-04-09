@@ -10,12 +10,21 @@ import { buildTrackCacheKey } from "../cache/utils";
 import { Track } from "../structures/Track";
 import type { RawTrack } from "../types";
 
-const createScanIterator = (batches: string[][]): RedisClientType["scanIterator"] =>
-  async function* () {
+const createScanIterator = (batches: string[][]): ReturnType<RedisClientType["scanIterator"]> =>
+  (async function* () {
     for (const batch of batches) {
       yield batch;
     }
-  } as RedisClientType["scanIterator"];
+  })() as ReturnType<RedisClientType["scanIterator"]>;
+
+const createScanIteratorFromValues = (
+  values: Array<string[] | string>
+): ReturnType<RedisClientType["scanIterator"]> =>
+  (async function* () {
+    for (const value of values) {
+      yield value;
+    }
+  })() as ReturnType<RedisClientType["scanIterator"]>;
 
 describe("Cache", () => {
   it("should set, get, has, and delete values in memory store", async () => {
@@ -168,6 +177,22 @@ describe("Cache", () => {
     await expect(store.clear()).rejects.toThrow(
       "RedisCacheStore.clear requires a prefix to avoid deleting unrelated Redis keys"
     );
+  });
+
+  it("should handle scanIterator implementations that yield individual keys", async () => {
+    const del = mock(() => Promise.resolve(1));
+    const store = new RedisCacheStore({
+      del,
+      exists: mock(() => Promise.resolve(1)),
+      get: mock(() => Promise.resolve(null)),
+      scanIterator: mock(() => createScanIteratorFromValues(["prefix:key-1", "prefix:key-2"])),
+      set: mock(() => Promise.resolve("OK")),
+    } as unknown as RedisClientType);
+
+    await store.clear("prefix");
+
+    expect(del).toHaveBeenCalledWith(["prefix:key-1"]);
+    expect(del).toHaveBeenCalledWith(["prefix:key-2"]);
   });
 
   it("should treat ttlMs=0 as immediate expiry in Redis store", async () => {

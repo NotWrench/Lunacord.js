@@ -664,12 +664,7 @@ export class Player {
   }
 
   private getPlaybackRate(): number {
-    const speed = this.filters.timescale?.speed;
-    const rate = this.filters.timescale?.rate;
-    const normalizedSpeed =
-      typeof speed === "number" && Number.isFinite(speed) && speed > 0 ? speed : 1;
-    const normalizedRate = typeof rate === "number" && Number.isFinite(rate) && rate > 0 ? rate : 1;
-    return normalizedSpeed * normalizedRate;
+    return this.filter.getPlaybackRate();
   }
 
   applyState(state: PlayerState): void {
@@ -725,7 +720,7 @@ export class Player {
   }
 
   async import(data: PlayerExportData): Promise<void> {
-    this.clearQueue();
+    this.queue.clear();
     this.history.clear();
 
     this.current = data.current ? Track.from(data.current) : null;
@@ -738,7 +733,7 @@ export class Player {
     this.repeatTrackEnabled = data.repeatTrackEnabled;
 
     if (data.queue.length > 0) {
-      this.addMany(data.queue.map((track) => Track.from(track)));
+      this.queue.enqueueMany(data.queue.map((track) => Track.from(track)));
     }
 
     for (const rawTrack of [...data.history].reverse()) {

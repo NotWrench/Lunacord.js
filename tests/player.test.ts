@@ -857,6 +857,7 @@ describe("Player", () => {
           speed: 1.1,
         },
       });
+      player.add(track);
       const snapshot = player.export();
 
       const importedNode = createMockNode();
@@ -871,8 +872,11 @@ describe("Player", () => {
         .map((event) => event.type);
 
       expect(eventTypes).not.toContain("playerFiltersUpdate");
+      expect(eventTypes).not.toContain("playerQueueClear");
+      expect(eventTypes).not.toContain("playerQueueAddMany");
       expect(importedNode.rest.updatePlayer).not.toHaveBeenCalled();
       expect(importedPlayer.filters.timescale?.speed).toBe(1.1);
+      expect(importedPlayer.queue.size).toBe(1);
     });
   });
 
