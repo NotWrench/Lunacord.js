@@ -1,4 +1,3 @@
-// core/Player.ts
 import type { LyricsClient } from "../lyrics/LyricsClient";
 import type { Rest } from "../rest/Rest";
 import {

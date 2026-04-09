@@ -1,5 +1,3 @@
-// core/Node.ts
-
 import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Rest } from "../rest/Rest";
 import type { SearchResult } from "../structures/SearchResult";

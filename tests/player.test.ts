@@ -1,4 +1,3 @@
-// tests/player.test.ts
 import { beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
 import type { PlayerNodeAdapter } from "../core/Player";
 import { Player } from "../core/Player";

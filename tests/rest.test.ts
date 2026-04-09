@@ -1,4 +1,3 @@
-// tests/rest.test.ts
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { LavalinkRestError, Rest, ValidationError } from "../rest/Rest";
 

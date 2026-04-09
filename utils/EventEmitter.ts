@@ -1,5 +1,3 @@
-// utils/EventEmitter.ts
-
 type Listener<T> = (data: T) => void;
 
 export class TypedEventEmitter<TEvents extends { [K in keyof TEvents]: TEvents[K] }> {
