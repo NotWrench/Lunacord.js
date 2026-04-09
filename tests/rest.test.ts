@@ -237,6 +237,97 @@ describe("Rest", () => {
       expect(result.details?.currentAddressIndex).toBe("2");
     });
 
+    it("should fetch all players for a session", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                guildId: "guild-1",
+                track: null,
+                volume: 100,
+                paused: false,
+                state: {
+                  time: 1,
+                  position: 0,
+                  connected: true,
+                  ping: 10,
+                },
+                voice: {
+                  token: "token",
+                  endpoint: "endpoint",
+                  sessionId: "session",
+                },
+                filters: {},
+              },
+            ]),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          )
+        )
+      ) as unknown as typeof fetch;
+
+      const players = await rest.getPlayers("session-123");
+
+      expect(players).toHaveLength(1);
+      expect(players[0]?.guildId).toBe("guild-1");
+    });
+
+    it("should fetch a single player for a guild", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              guildId: "guild-1",
+              track: null,
+              volume: 100,
+              paused: false,
+              state: {
+                time: 1,
+                position: 0,
+                connected: true,
+                ping: 10,
+              },
+              voice: {
+                token: "token",
+                endpoint: "endpoint",
+                sessionId: "session",
+              },
+              filters: {},
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          )
+        )
+      ) as unknown as typeof fetch;
+
+      const player = await rest.getPlayer("session-123", "guild-1");
+
+      expect(player.guildId).toBe("guild-1");
+    });
+
+    it("should free a specific route planner address", async () => {
+      const bodies: string[] = [];
+      globalThis.fetch = mock((_url: string | URL, init?: RequestInit) => {
+        bodies.push(String(init?.body ?? ""));
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }) as unknown as typeof fetch;
+
+      await rest.freeRoutePlannerAddress("1.2.3.4");
+
+      expect(bodies).toEqual(['{"address":"1.2.3.4"}']);
+    });
+
+    it("should free all route planner addresses", async () => {
+      const urls: string[] = [];
+      globalThis.fetch = mock((url: string | URL) => {
+        urls.push(String(url));
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }) as unknown as typeof fetch;
+
+      await rest.freeAllRoutePlannerAddresses();
+
+      expect(urls).toEqual(["http://localhost:2333/v4/routeplanner/free/all"]);
+    });
+
     it("should decode tracks in batch", async () => {
       mockFetch(() =>
         Promise.resolve(

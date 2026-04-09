@@ -18,7 +18,7 @@ import type {
   LyricsResult,
   PlayerState,
   PlayerUpdatePayload,
-  SearchProvider,
+  SearchProviderInput,
 } from "../types";
 import type { VoiceConnectOptions } from "./Node";
 
@@ -54,6 +54,18 @@ export type PlayerActionEvent =
       guildId: string;
       queueSize: number;
       track: Track;
+    }
+  | {
+      type: "playerQueueAddMany";
+      guildId: string;
+      queueSize: number;
+      tracks: Track[];
+    }
+  | {
+      type: "playerQueueClear";
+      clearedCount: number;
+      guildId: string;
+      queueSize: number;
     }
   | {
       from: number;
@@ -137,7 +149,7 @@ export interface PlayerNodeAdapter {
   readonly rest: Pick<Rest, "loadTracks" | "search" | "updatePlayer">;
   readonly sessionId: string | null;
   transformSearchResult?: (
-    context: { guildId: string; player: Player; provider?: SearchProvider; query: string },
+    context: { guildId: string; player: Player; provider?: SearchProviderInput; query: string },
     result: SearchResult
   ) => Promise<SearchResult> | SearchResult;
 }
@@ -420,7 +432,7 @@ export class Player {
     });
   }
 
-  async search(query: string, provider?: SearchProvider): Promise<SearchResult> {
+  async search(query: string, provider?: SearchProviderInput): Promise<SearchResult> {
     const result = await this.node.rest.search(query, provider);
     const searchResult = toSearchResult(result);
     return (
@@ -436,7 +448,7 @@ export class Player {
     );
   }
 
-  async searchAndPlay(query: string, provider?: SearchProvider): Promise<SearchResult> {
+  async searchAndPlay(query: string, provider?: SearchProviderInput): Promise<SearchResult> {
     const result = await this.search(query, provider);
 
     if (result.loadType === "empty" || result.loadType === "error" || result.tracks.length === 0) {
@@ -444,7 +456,7 @@ export class Player {
     }
 
     const tracksToQueue = result.loadType === "playlist" ? result.tracks : [result.tracks[0]!];
-    this.enqueueTracks(tracksToQueue);
+    this.addMany(tracksToQueue);
 
     if (!this.current) {
       await this.play();
@@ -462,6 +474,20 @@ export class Player {
     });
   }
 
+  addMany(tracks: Track[]): void {
+    if (tracks.length === 0) {
+      return;
+    }
+
+    this.queue.enqueueMany(tracks);
+    this.emitActionEvent({
+      type: "playerQueueAddMany",
+      guildId: this.guildId,
+      tracks,
+      queueSize: this.queue.size,
+    });
+  }
+
   remove(index: number): Track | undefined {
     const removed = this.queue.remove(index);
     if (removed) {
@@ -475,12 +501,6 @@ export class Player {
     }
 
     return removed;
-  }
-
-  private enqueueTracks(tracks: Track[]): void {
-    for (const track of tracks) {
-      this.add(track);
-    }
   }
 
   insert(index: number, track: Track): void {
@@ -522,6 +542,17 @@ export class Player {
       by: options?.by ?? "encoded",
     });
     return removedCount;
+  }
+
+  clearQueue(): void {
+    const clearedCount = this.queue.size;
+    this.queue.clear();
+    this.emitActionEvent({
+      type: "playerQueueClear",
+      guildId: this.guildId,
+      clearedCount,
+      queueSize: this.queue.size,
+    });
   }
 
   getQueue(): Track[] {
@@ -576,7 +607,17 @@ export class Player {
     }
 
     const elapsed = Math.max(0, Date.now() - this.lastUpdateAt);
-    return clampPosition(this.position + elapsed, this.current);
+    const rate = this.getPlaybackRate();
+    return clampPosition(this.position + elapsed * rate, this.current);
+  }
+
+  private getPlaybackRate(): number {
+    const speed = this.filters.timescale?.speed;
+    if (typeof speed !== "number" || !Number.isFinite(speed) || speed <= 0) {
+      return 1;
+    }
+
+    return speed;
   }
 
   applyState(state: PlayerState): void {

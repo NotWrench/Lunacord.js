@@ -10,11 +10,13 @@ export enum SearchProvider {
   AppleMusic = "amsearch",
 }
 
+export type SearchProviderInput = SearchProvider | string;
+
 export const DEFAULT_SEARCH_PROVIDER = SearchProvider.YouTube;
 
 export const buildSearchIdentifier = (
   query: string,
-  provider: SearchProvider = DEFAULT_SEARCH_PROVIDER
+  provider: SearchProviderInput = DEFAULT_SEARCH_PROVIDER
 ): string => `${provider}:${query}`;
 
 // --- Exception ---

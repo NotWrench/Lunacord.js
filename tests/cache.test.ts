@@ -161,6 +161,19 @@ describe("MemoryCacheStore", () => {
     globalThis.setInterval = originalSetInterval;
     globalThis.clearInterval = originalClearInterval;
   });
+
+  it("should evict least recently used entries when maxEntries is reached", async () => {
+    const store = new MemoryCacheStore({ maxEntries: 2 });
+
+    await store.set("a", 1);
+    await store.set("b", 2);
+    await store.get("a");
+    await store.set("c", 3);
+
+    await expect(store.has("a")).resolves.toBe(true);
+    await expect(store.has("b")).resolves.toBe(false);
+    await expect(store.has("c")).resolves.toBe(true);
+  });
 });
 
 describe("buildTrackCacheKey", () => {

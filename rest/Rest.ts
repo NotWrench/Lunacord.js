@@ -5,11 +5,13 @@ import {
   InfoResponseSchema,
   type LoadResult,
   LoadResultSchema,
+  PlayerSchema,
   type PlayerUpdatePayload,
   type RawTrack,
+  type Player as RestPlayer,
   type RoutePlannerStatus,
   RoutePlannerStatusSchema,
-  type SearchProvider,
+  type SearchProviderInput,
   type Session,
   SessionSchema,
   TrackSchema,
@@ -336,7 +338,7 @@ export class Rest {
     return this.request("GET", `/v4/loadtracks?identifier=${encodedIdentifier}`, LoadResultSchema);
   }
 
-  search(query: string, provider?: SearchProvider): Promise<LoadResult> {
+  search(query: string, provider?: SearchProviderInput): Promise<LoadResult> {
     return this.loadTracks(buildSearchIdentifier(query, provider));
   }
 
@@ -355,6 +357,22 @@ export class Rest {
 
   getRoutePlannerStatus(): Promise<RoutePlannerStatus> {
     return this.request("GET", "/v4/routeplanner/status", RoutePlannerStatusSchema);
+  }
+
+  getPlayers(sessionId: string): Promise<RestPlayer[]> {
+    return this.request("GET", `/v4/sessions/${sessionId}/players`, z.array(PlayerSchema));
+  }
+
+  getPlayer(sessionId: string, guildId: string): Promise<RestPlayer> {
+    return this.request("GET", `/v4/sessions/${sessionId}/players/${guildId}`, PlayerSchema);
+  }
+
+  freeRoutePlannerAddress(address: string): Promise<void> {
+    return this.request("POST", "/v4/routeplanner/free/address", undefined, { address });
+  }
+
+  freeAllRoutePlannerAddresses(): Promise<void> {
+    return this.request("POST", "/v4/routeplanner/free/all");
   }
 
   getVersion(): Promise<VersionResponse> {

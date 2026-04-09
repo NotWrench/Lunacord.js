@@ -23,6 +23,7 @@ export type CacheResolver<T> = () => Promise<T> | T;
 
 export interface MemoryCacheOptions {
   cleanupIntervalMs?: number;
+  maxEntries?: number;
 }
 
 export interface CacheOptions {

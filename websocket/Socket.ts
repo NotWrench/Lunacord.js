@@ -29,6 +29,7 @@ interface SocketOptions {
   port: number;
   secure?: boolean;
   userId: string;
+  webSocketFactory?: WebSocketFactory;
 }
 
 const INITIAL_RECONNECT_DELAY = 1000;
@@ -38,10 +39,40 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 type JsonPrimitive = boolean | null | number | string;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
+interface WebSocketCloseEvent {
+  code?: number;
+  reason?: string;
+}
+
+interface WebSocketMessageEvent {
+  data: string | Blob | ArrayBufferLike;
+}
+
+interface WebSocketLike {
+  close: (code?: number, reason?: string) => void;
+  onclose: ((event: WebSocketCloseEvent) => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onmessage: ((event: WebSocketMessageEvent) => void) | null;
+  onopen: ((event: unknown) => void) | null;
+  readonly readyState: number;
+  send: (data: string) => void;
+}
+
+export interface WebSocketFactoryContext {
+  headers: Record<string, string>;
+  url: string;
+}
+
+export type WebSocketFactory = (context: WebSocketFactoryContext) => WebSocketLike;
+
+const SOCKET_READY_STATE_OPEN = 1;
+const UNKNOWN_CLOSE_CODE = 1006;
+const UNKNOWN_CLOSE_REASON = "WebSocket closed";
+
 export class Socket extends TypedEventEmitter<SocketEvents> {
   private readonly options: SocketOptions;
   public sessionId: string | null = null;
-  private ws: WebSocket | null = null;
+  private ws: WebSocketLike | null = null;
   private intentionalClose = false;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -72,7 +103,7 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
   }
 
   send(data: JsonValue): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    if (!this.ws || this.ws.readyState !== SOCKET_READY_STATE_OPEN) {
       this.emit("error", new Error("WebSocket is not connected"));
       return;
     }
@@ -89,7 +120,7 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
     const protocol = secure ? "wss" : "ws";
     const url = `${protocol}://${host}:${port}/v4/websocket`;
 
-    const headers: Bun.WebSocketOptions["headers"] = {
+    const headers: Record<string, string> = {
       Authorization: password,
       "User-Id": userId,
       "Num-Shards": String(numShards),
@@ -100,18 +131,21 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
       headers["Session-Id"] = this.sessionId;
     }
 
-    this.ws = new WebSocket(url, { headers });
+    this.ws = this.createWebSocket(url, headers);
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
     };
 
-    this.ws.onmessage = (event: MessageEvent) => {
+    this.ws.onmessage = (event) => {
       this.handleMessage(event.data);
     };
 
-    this.ws.onclose = (event: CloseEvent) => {
-      this.emit("close", { code: event.code, reason: event.reason });
+    this.ws.onclose = (event) => {
+      this.emit("close", {
+        code: event.code ?? UNKNOWN_CLOSE_CODE,
+        reason: event.reason ?? UNKNOWN_CLOSE_REASON,
+      });
 
       if (!this.intentionalClose) {
         this.attemptReconnect();
@@ -121,6 +155,33 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
     this.ws.onerror = () => {
       this.emit("error", new Error("WebSocket connection error"));
     };
+  }
+
+  private createWebSocket(url: string, headers: Record<string, string>): WebSocketLike {
+    if (this.options.webSocketFactory) {
+      return this.options.webSocketFactory({
+        url,
+        headers,
+      });
+    }
+
+    if (typeof globalThis.WebSocket !== "function") {
+      throw new Error(
+        "No global WebSocket implementation found. Provide webSocketFactory in Node options."
+      );
+    }
+
+    const RuntimeWebSocket = globalThis.WebSocket as unknown as {
+      new (url: string, protocols?: string | string[]): WebSocketLike;
+    };
+
+    try {
+      return new RuntimeWebSocket(url, {
+        headers,
+      } as unknown as string[]);
+    } catch {
+      return new RuntimeWebSocket(url);
+    }
   }
 
   private handleMessage(raw: string | Blob | ArrayBufferLike): void {

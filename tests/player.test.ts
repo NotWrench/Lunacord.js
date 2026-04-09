@@ -7,7 +7,13 @@ import { Filter } from "../structures/Filter";
 import { Queue } from "../structures/Queue";
 import type { SearchResult } from "../structures/SearchResult";
 import { Track } from "../structures/Track";
-import { type Filters, type LoadResult, type RawTrack, SearchProvider } from "../types";
+import {
+  type Filters,
+  type LoadResult,
+  type RawTrack,
+  SearchProvider,
+  type SearchProviderInput,
+} from "../types";
 
 const MOCK_RAW_TRACK: RawTrack = {
   encoded: "QAABJAMACk5ldmVyIEdvbm5h...",
@@ -46,7 +52,7 @@ const MOCK_RAW_TRACK_2: RawTrack = {
 const createMockNode = (): MockPlayerNode => {
   const updatePlayer = mock(() => Promise.resolve());
   const search = mock(
-    (query: string, provider?: SearchProvider): Promise<LoadResult> =>
+    (query: string, provider?: SearchProviderInput): Promise<LoadResult> =>
       Promise.resolve({
         loadType: "search",
         data: [MOCK_RAW_TRACK_2],
@@ -132,6 +138,41 @@ describe("Player", () => {
       player.add(track);
       expect(player.queue.size).toBe(1);
       expect(player.queue.peek()?.title).toBe("Never Gonna Give You Up");
+    });
+
+    it("should add many tracks with a single batched event", () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      player.addMany([track, track2]);
+
+      expect(player.queue.size).toBe(2);
+      expect(emitPlayerEvent).toHaveBeenCalledTimes(1);
+      expect(emitPlayerEvent).toHaveBeenCalledWith({
+        type: "playerQueueAddMany",
+        guildId: "guild-123",
+        tracks: [track, track2],
+        queueSize: 2,
+      });
+    });
+  });
+
+  describe("clearQueue", () => {
+    it("should clear queue and emit a clear event", () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+      player.add(track);
+      player.add(track2);
+
+      player.clearQueue();
+
+      expect(player.queue.size).toBe(0);
+      expect(emitPlayerEvent).toHaveBeenLastCalledWith({
+        type: "playerQueueClear",
+        guildId: "guild-123",
+        clearedCount: 2,
+        queueSize: 0,
+      });
     });
   });
 
@@ -750,6 +791,7 @@ describe("Player", () => {
 
       expect(player.getEstimatedPosition()).toBe(7_000);
       expect(player.ping).toBe(42);
+      nowSpy.mockRestore();
     });
 
     it("should use local receipt time instead of the server clock for interpolation", () => {
@@ -767,6 +809,7 @@ describe("Player", () => {
       nowSpy.mockReturnValue(1_002_000);
 
       expect(player.getEstimatedPosition()).toBe(7_000);
+      nowSpy.mockRestore();
     });
 
     it("should not advance while paused", () => {
@@ -784,6 +827,53 @@ describe("Player", () => {
       nowSpy.mockReturnValue(1_002_000);
 
       expect(player.getEstimatedPosition()).toBe(5_000);
+      nowSpy.mockRestore();
+    });
+
+    it("should apply timescale speed when estimating position", async () => {
+      player.current = track;
+      player.connected = true;
+      player.paused = false;
+      await player.setFilters({
+        timescale: {
+          speed: 2,
+        },
+      });
+      const nowSpy = spyOn(Date, "now");
+      nowSpy.mockReturnValue(1_000_000);
+      player.applyState({
+        time: 1_000_000,
+        position: 5_000,
+        connected: true,
+        ping: 42,
+      });
+      nowSpy.mockReturnValue(1_002_000);
+
+      expect(player.getEstimatedPosition()).toBe(9_000);
+      nowSpy.mockRestore();
+    });
+
+    it("should apply slower timescale speed when estimating position", async () => {
+      player.current = track;
+      player.connected = true;
+      player.paused = false;
+      await player.setFilters({
+        timescale: {
+          speed: 0.5,
+        },
+      });
+      const nowSpy = spyOn(Date, "now");
+      nowSpy.mockReturnValue(1_000_000);
+      player.applyState({
+        time: 1_000_000,
+        position: 5_000,
+        connected: true,
+        ping: 42,
+      });
+      nowSpy.mockReturnValue(1_002_000);
+
+      expect(player.getEstimatedPosition()).toBe(6_000);
+      nowSpy.mockRestore();
     });
   });
 
@@ -838,7 +928,7 @@ describe("Player", () => {
         getMockEvents(emitPlayerEvent)
           .filter(isEventWithType)
           .map((event) => event.type)
-      ).toContain("playerQueueAdd");
+      ).toContain("playerQueueAddMany");
     });
 
     it("should enqueue all playlist tracks", async () => {
@@ -868,7 +958,7 @@ describe("Player", () => {
         getMockEvents(emitPlayerEvent)
           .filter(isEventWithType)
           .map((event) => event.type)
-      ).toEqual(["playerQueueAdd", "playerQueueAdd", "playerPlay"]);
+      ).toEqual(["playerQueueAddMany", "playerPlay"]);
     });
 
     it("should not mutate playback state for empty results", async () => {

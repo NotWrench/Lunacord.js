@@ -421,6 +421,12 @@ describe("Lunacord", () => {
     lunacord.on("playerQueueAdd", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:queueAdd:${guildId}`);
     });
+    lunacord.on("playerQueueAddMany", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:queueAddMany:${guildId}`);
+    });
+    lunacord.on("playerQueueClear", ({ guildId, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:queueClear:${guildId}`);
+    });
     lunacord.on("playerQueueRemove", ({ guildId, node: sourceNode }) => {
       events.push(`${sourceNode.id}:queueRemove:${guildId}`);
     });
@@ -468,6 +474,16 @@ describe("Lunacord", () => {
       guildId: "guild-123",
       track,
       queueSize: 1,
+    });
+    node.emit("playerQueueAddMany", {
+      guildId: "guild-123",
+      tracks: [track],
+      queueSize: 1,
+    });
+    node.emit("playerQueueClear", {
+      guildId: "guild-123",
+      clearedCount: 1,
+      queueSize: 0,
     });
     node.emit("playerQueueRemove", {
       guildId: "guild-123",
@@ -519,6 +535,8 @@ describe("Lunacord", () => {
       "node-a:resume:guild-123",
       "node-a:play:guild-123",
       "node-a:queueAdd:guild-123",
+      "node-a:queueAddMany:guild-123",
+      "node-a:queueClear:guild-123",
       "node-a:queueRemove:guild-123",
       "node-a:repeatQueue:guild-123:on",
       "node-a:repeatTrack:guild-123:off",
@@ -548,6 +566,26 @@ describe("Lunacord", () => {
     });
 
     expect(events).toEqual(["node-a:1:1000"]);
+  });
+
+  it("should re-emit debug events with node context", () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
+    const events: string[] = [];
+
+    lunacord.on("debug", (event) => {
+      events.push(`${event.node.id}:${event.category}:${event.message}`);
+    });
+
+    node.emit("debug", {
+      category: "ws",
+      message: "Socket reconnecting",
+      context: {
+        attempt: 1,
+      },
+    });
+
+    expect(events).toEqual(["node-a:ws:Socket reconnecting"]);
   });
 
   it("should re-emit nodeVoiceSocketClosed with node context", () => {
@@ -610,6 +648,26 @@ describe("Lunacord", () => {
 
     expect(nodeA!.handleVoicePacket).toHaveBeenCalledTimes(1);
     expect(nodeB!.handleVoicePacket).toHaveBeenCalledTimes(1);
+  });
+
+  it("should ignore non-voice packets in handleVoicePacket", () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+    nodeA!.handleVoicePacket = mock(() => {});
+    nodeB!.handleVoicePacket = mock(() => {});
+
+    lunacord.handleVoicePacket({
+      t: "GUILD_CREATE",
+      d: {
+        guild_id: "guild-999",
+      },
+    });
+
+    expect(nodeA!.handleVoicePacket).not.toHaveBeenCalled();
+    expect(nodeB!.handleVoicePacket).not.toHaveBeenCalled();
   });
 
   it("should call the shared voice callback for connectVoice", async () => {
@@ -817,6 +875,23 @@ describe("Lunacord", () => {
     expect(restoreSpy).toHaveBeenCalledWith(player);
   });
 
+  it("should mark restored current tracks as active for lyrics tracking", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
+    node.sessionId = "session-a";
+    const player = lunacord.createPlayer("guild-restore-lyrics");
+    const track = new Track(MOCK_RAW_TRACK);
+    player.current = track;
+
+    const markTrackActiveSpy = spyOn(getInternalLyricsClient(lunacord), "markTrackActive");
+    node.restorePlayer = mock(() => Promise.resolve());
+
+    node.emit("ready", createReadyPayload("session-a"));
+    await Promise.resolve();
+
+    expect(markTrackActiveSpy).toHaveBeenCalledWith("guild-restore-lyrics", track);
+  });
+
   it("should not restore managed players when Lavalink resumes the session", async () => {
     const lunacord = new Lunacord(BASE_OPTIONS);
     const node = lunacord.getNode("node-a")!;
@@ -853,6 +928,33 @@ describe("Lunacord", () => {
 
     expect(observed).toContain("ready");
     expect(observed).toContain("nodeConnect");
+  });
+
+  it("should emit pluginError for observe failures on node-less events", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const pluginErrors: string[] = [];
+
+    lunacord.use({
+      name: "failing-observer",
+      observe: () => {
+        throw new Error("observer failed");
+      },
+    });
+
+    lunacord.on("pluginError", ({ pluginName, eventType, error, node }) => {
+      pluginErrors.push(`${pluginName}:${eventType}:${error.message}:${node ? "node" : "none"}`);
+    });
+
+    const invokeNotifyPlugins = (
+      lunacord as unknown as {
+        notifyPlugins: (event: { type: string }) => Promise<void>;
+      }
+    ).notifyPlugins;
+    await invokeNotifyPlugins.call(lunacord, {
+      type: "synthetic",
+    });
+
+    expect(pluginErrors).toContain("failing-observer:synthetic:observer failed:none");
   });
 
   it("should let plugins transform player search results", async () => {

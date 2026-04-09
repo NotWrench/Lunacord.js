@@ -16,6 +16,8 @@ export class Track {
   readonly isrc: string | null;
   readonly isStream: boolean;
   readonly sourceName: string;
+  readonly pluginInfo: Readonly<Record<string, unknown>>;
+  readonly userData: Readonly<Record<string, unknown>>;
 
   private readonly raw: RawTrack;
 
@@ -33,6 +35,8 @@ export class Track {
     this.isrc = parsed.info.isrc ?? null;
     this.isStream = parsed.info.isStream;
     this.sourceName = parsed.info.sourceName;
+    this.pluginInfo = parsed.pluginInfo ?? {};
+    this.userData = parsed.userData ?? {};
   }
 
   static from(data: RawTrack): Track {

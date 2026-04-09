@@ -67,6 +67,7 @@ export type {
   RawTrack,
   ReadyPayload,
   RoutePlannerStatus,
+  SearchProviderInput,
   Stats,
   TrackEvent,
   TrackInfo,
@@ -107,4 +108,8 @@ export {
   WebSocketMessageSchema,
 } from "./types";
 export { TypedEventEmitter } from "./utils/EventEmitter";
-export { Socket } from "./websocket/Socket";
+export {
+  Socket,
+  type WebSocketFactory,
+  type WebSocketFactoryContext,
+} from "./websocket/Socket";

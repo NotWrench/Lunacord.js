@@ -8,8 +8,14 @@ import type {
   RestResponseContext,
 } from "../rest/Rest";
 import type { SearchResult } from "../structures/SearchResult";
-import type { LyricsOptions, LyricsRequestOptions, LyricsResult, SearchProvider } from "../types";
+import type {
+  LyricsOptions,
+  LyricsRequestOptions,
+  LyricsResult,
+  SearchProviderInput,
+} from "../types";
 import { TypedEventEmitter } from "../utils/EventEmitter";
+import type { WebSocketFactory } from "../websocket/Socket";
 import {
   type GatewayVoiceStatePayload,
   Node,
@@ -93,6 +99,7 @@ export interface LunacordOptions {
   sendGatewayPayload?: (guildId: string, payload: GatewayVoiceStatePayload) => void | Promise<void>;
   timeout?: number;
   userId: string;
+  webSocketFactory?: WebSocketFactory;
 }
 
 type NodeBound<T> = T & { node: Node };
@@ -115,6 +122,8 @@ export interface LunacordEvents extends NodeBoundEvents {
   playerPause: NodeBound<NodeEvents["playerPause"]>;
   playerPlay: NodeBound<NodeEvents["playerPlay"]>;
   playerQueueAdd: NodeBound<NodeEvents["playerQueueAdd"]>;
+  playerQueueAddMany: NodeBound<NodeEvents["playerQueueAddMany"]>;
+  playerQueueClear: NodeBound<NodeEvents["playerQueueClear"]>;
   playerQueueDedupe: NodeBound<NodeEvents["playerQueueDedupe"]>;
   playerQueueInsert: NodeBound<NodeEvents["playerQueueInsert"]>;
   playerQueueMove: NodeBound<NodeEvents["playerQueueMove"]>;
@@ -128,6 +137,12 @@ export interface LunacordEvents extends NodeBoundEvents {
   playerStop: NodeBound<NodeEvents["playerStop"]>;
   playerUpdate: NodeBound<NodeEvents["playerUpdate"]>;
   playerVolumeUpdate: NodeBound<NodeEvents["playerVolumeUpdate"]>;
+  pluginError: {
+    error: Error;
+    eventType: string;
+    node?: Node;
+    pluginName: string;
+  };
   ready: NodeBound<NodeEvents["ready"]>;
   trackEnd: NodeBound<NodeEvents["trackEnd"]>;
   trackException: NodeBound<NodeEvents["trackException"]>;
@@ -156,7 +171,7 @@ export interface LunacordPlugin {
       guildId: string;
       node: Node;
       player: Player;
-      provider?: SearchProvider;
+      provider?: SearchProviderInput;
       query: string;
     },
     result: SearchResult
@@ -324,8 +339,16 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   }
 
   handleVoicePacket(packet: unknown): void {
+    if (!this.isVoicePacket(packet)) {
+      return;
+    }
+
     const guildId = this.extractGuildId(packet);
-    const owner = guildId ? this.getNodeForGuild(guildId) : undefined;
+    if (!guildId) {
+      return;
+    }
+
+    const owner = this.getNodeForGuild(guildId);
 
     if (owner) {
       owner.handleVoicePacket(packet);
@@ -335,6 +358,15 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     for (const node of this.getNodes().filter((candidate) => candidate.connected)) {
       node.handleVoicePacket(packet);
     }
+  }
+
+  private isVoicePacket(packet: unknown): boolean {
+    if (typeof packet !== "object" || packet === null || !("t" in packet)) {
+      return false;
+    }
+
+    const packetType = packet.t;
+    return packetType === "VOICE_STATE_UPDATE" || packetType === "VOICE_SERVER_UPDATE";
   }
 
   use(plugin: LunacordPlugin): this {
@@ -386,6 +418,9 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     node.on("playerPause", (payload) => {
       emitObserved("playerPause", { ...payload, node });
     });
+    node.on("debug", (payload) => {
+      emitObserved("debug", { ...payload, node });
+    });
     node.on("playerFiltersClear", (payload) => {
       emitObserved("playerFiltersClear", { ...payload, node });
     });
@@ -398,6 +433,12 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     });
     node.on("playerQueueAdd", (payload) => {
       emitObserved("playerQueueAdd", { ...payload, node });
+    });
+    node.on("playerQueueAddMany", (payload) => {
+      emitObserved("playerQueueAddMany", { ...payload, node });
+    });
+    node.on("playerQueueClear", (payload) => {
+      emitObserved("playerQueueClear", { ...payload, node });
     });
     node.on("playerQueueDedupe", (payload) => {
       emitObserved("playerQueueDedupe", { ...payload, node });
@@ -521,6 +562,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       sendGatewayPayload: this.options.sendGatewayPayload,
       timeout: this.options.timeout,
       userId: this.options.userId,
+      webSocketFactory: this.options.webSocketFactory,
       lyricsClient: this.lyricsClient,
     };
   }
@@ -553,11 +595,22 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       try {
         await plugin.observe?.(event);
       } catch (error) {
-        if (!("node" in event) || !(event.node instanceof Node)) {
-          continue;
-        }
+        const normalizedError =
+          error instanceof Error
+            ? error
+            : new Error(`Plugin ${plugin.name} failed: ${String(error)}`);
+        const node = "node" in event && event.node instanceof Node ? event.node : undefined;
 
-        await this.handlePluginError(event.node, error, plugin.name);
+        this.emit("pluginError", {
+          pluginName: plugin.name,
+          eventType: event.type,
+          error: normalizedError,
+          node,
+        });
+
+        if (node) {
+          await this.handlePluginError(node, normalizedError, plugin.name);
+        }
       }
     }
   }
@@ -756,6 +809,9 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     for (const player of node.getPlayers()) {
       try {
         await node.restorePlayer(player);
+        if (player.current) {
+          this.lyricsClient.markTrackActive(player.guildId, player.current);
+        }
       } catch (error) {
         await this.handlePluginError(
           node,
