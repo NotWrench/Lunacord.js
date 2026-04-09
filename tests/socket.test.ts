@@ -18,6 +18,39 @@ const getHandleMessage = (socket: Socket): ((raw: string) => void) => {
 };
 
 describe("Socket", () => {
+  it("should throw a clear error when runtime websocket cannot accept headers", () => {
+    const originalWebSocket = globalThis.WebSocket;
+
+    class HeaderRejectingWebSocket {
+      static readonly OPEN = 1;
+
+      constructor(_url: string | URL, protocols?: string | string[]) {
+        if (protocols !== undefined) {
+          throw new TypeError("invalid protocols");
+        }
+      }
+
+      close(): void {}
+      send(): void {}
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onopen: (() => void) | null = null;
+      readonly readyState = HeaderRejectingWebSocket.OPEN;
+    }
+
+    globalThis.WebSocket = HeaderRejectingWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const socket = new Socket(SOCKET_OPTIONS);
+      expect(() => socket.connect()).toThrow(
+        "This WebSocket runtime does not support custom headers. Provide webSocketFactory in Node/Lunacord options."
+      );
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  });
+
   it("should emit an error for invalid websocket payloads", () => {
     const socket = new Socket(SOCKET_OPTIONS);
     const errors: Error[] = [];

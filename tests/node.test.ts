@@ -488,6 +488,20 @@ describe("Node", () => {
 
       expect(wsEvents).toEqual(["2:2000"]);
     });
+
+    it("should emit nodeReconnectFailed ws events when reconnect attempts are exhausted", () => {
+      const wsEvents: string[] = [];
+
+      node.on("ws", (event) => {
+        if (event.type === "nodeReconnectFailed") {
+          wsEvents.push(String(event.attempts));
+        }
+      });
+
+      node.socket.emit("reconnectFailed", { attempts: 5 });
+
+      expect(wsEvents).toEqual(["5"]);
+    });
   });
 
   describe("player action events", () => {
@@ -504,6 +518,8 @@ describe("Node", () => {
       node.on("playerVolumeUpdate", () => events.push("playerVolumeUpdate"));
       node.on("playerStop", () => events.push("playerStop"));
       node.on("playerQueueAdd", () => events.push("playerQueueAdd"));
+      node.on("playerQueueAddMany", () => events.push("playerQueueAddMany"));
+      node.on("playerQueueClear", () => events.push("playerQueueClear"));
       node.on("playerQueueRemove", () => events.push("playerQueueRemove"));
       node.on("playerSkip", () => events.push("playerSkip"));
 
@@ -515,6 +531,8 @@ describe("Node", () => {
 
       player.add(track);
       player.remove(0);
+      player.addMany([track, nextTrack]);
+      player.clearQueue();
 
       await player.play(track);
       await player.pause(true);
@@ -529,6 +547,8 @@ describe("Node", () => {
       expect(events).toEqual([
         "playerQueueAdd",
         "playerQueueRemove",
+        "playerQueueAddMany",
+        "playerQueueClear",
         "playerPlay",
         "playerPause",
         "playerResume",
@@ -539,6 +559,20 @@ describe("Node", () => {
         "playerPlay",
         "playerSkip",
       ]);
+    });
+  });
+
+  describe("debug events", () => {
+    it("should emit structured websocket debug events", () => {
+      const debugEvents: string[] = [];
+
+      node.on("debug", (event) => {
+        debugEvents.push(`${event.category}:${event.message}`);
+      });
+
+      node.socket.emit("reconnecting", { attempt: 2, delay: 2_000 });
+
+      expect(debugEvents).toContain("ws:Socket reconnecting");
     });
   });
 

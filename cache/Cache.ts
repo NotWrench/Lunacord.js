@@ -1,10 +1,17 @@
-import type { CacheNamespaceOptions, CacheResolver, CacheSetOptions, CacheStore } from "./types";
+import type {
+  CacheLogger,
+  CacheNamespaceOptions,
+  CacheResolver,
+  CacheSetOptions,
+  CacheStore,
+} from "./types";
 
 const joinNamespace = (prefix: string, key: string): string => (prefix ? `${prefix}:${key}` : key);
 
 export class Cache {
   private readonly defaultTtlMs?: number;
   private readonly inFlight = new Map<string, Promise<unknown>>();
+  private readonly logger?: CacheLogger;
   private readonly prefix: string;
   private readonly store: CacheStore;
 
@@ -12,6 +19,7 @@ export class Cache {
     this.store = store;
     this.prefix = prefix;
     this.defaultTtlMs = options?.defaultTtlMs;
+    this.logger = options?.logger;
   }
 
   async clear(): Promise<void> {
@@ -20,6 +28,9 @@ export class Cache {
     try {
       await this.store.clear(this.getPrefix());
     } catch {
+      this.logger?.warn?.("Cache clear failed", {
+        prefix: this.prefix,
+      });
       // Cache failures should not break primary flows.
     }
   }
@@ -28,14 +39,24 @@ export class Cache {
     try {
       return await this.store.delete(this.getStoreKey(key));
     } catch {
+      this.logger?.warn?.("Cache delete failed", {
+        key: this.getStoreKey(key),
+      });
       return false;
     }
   }
 
   async get<T>(key: string): Promise<T | null> {
     try {
-      return await this.store.get<T>(this.getStoreKey(key));
+      const value = await this.store.get<T>(this.getStoreKey(key));
+      this.logger?.debug?.(value === null ? "Cache miss" : "Cache hit", {
+        key: this.getStoreKey(key),
+      });
+      return value;
     } catch {
+      this.logger?.warn?.("Cache get failed", {
+        key: this.getStoreKey(key),
+      });
       return null;
     }
   }
@@ -64,6 +85,7 @@ export class Cache {
   namespace(name: string, options?: CacheNamespaceOptions): Cache {
     return new Cache(this.store, joinNamespace(this.prefix, name), {
       defaultTtlMs: options?.defaultTtlMs ?? this.defaultTtlMs,
+      logger: options?.logger ?? this.logger,
     });
   }
 
@@ -72,7 +94,14 @@ export class Cache {
       await this.store.set(this.getStoreKey(key), value, {
         ttlMs: options?.ttlMs ?? this.defaultTtlMs,
       });
+      this.logger?.debug?.("Cache set", {
+        key: this.getStoreKey(key),
+        ttlMs: options?.ttlMs ?? this.defaultTtlMs ?? null,
+      });
     } catch {
+      this.logger?.warn?.("Cache set failed", {
+        key: this.getStoreKey(key),
+      });
       // Cache failures should not break primary flows.
     }
   }

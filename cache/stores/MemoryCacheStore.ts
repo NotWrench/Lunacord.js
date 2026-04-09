@@ -2,11 +2,16 @@ import type { CacheEntry, CacheSetOptions, MemoryCacheOptions } from "../types";
 
 export class MemoryCacheStore {
   private readonly cleanupIntervalMs?: number;
+  private readonly maxEntries?: number;
   private readonly entries = new Map<string, CacheEntry<unknown>>();
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options?: MemoryCacheOptions) {
     this.cleanupIntervalMs = options?.cleanupIntervalMs;
+    this.maxEntries =
+      typeof options?.maxEntries === "number" && options.maxEntries > 0
+        ? options.maxEntries
+        : undefined;
 
     if (this.cleanupIntervalMs && this.cleanupIntervalMs > 0) {
       const timer = setInterval(() => {
@@ -52,6 +57,8 @@ export class MemoryCacheStore {
       return null;
     }
 
+    this.touchEntry(key, entry);
+
     return entry.value as T;
   }
 
@@ -66,15 +73,19 @@ export class MemoryCacheStore {
       return false;
     }
 
+    this.touchEntry(key, entry);
+
     return true;
   }
 
   async set<T>(key: string, value: T, options?: CacheSetOptions): Promise<void> {
     const ttlMs = options?.ttlMs;
+    this.entries.delete(key);
     this.entries.set(key, {
       value,
       expiresAt: typeof ttlMs === "number" ? Date.now() + ttlMs : null,
     });
+    this.evictEntriesIfNeeded();
   }
 
   stop(): void {
@@ -95,6 +106,26 @@ export class MemoryCacheStore {
       if (this.isExpired(entry)) {
         this.entries.delete(key);
       }
+    }
+  }
+
+  private touchEntry(key: string, entry: CacheEntry<unknown>): void {
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+  }
+
+  private evictEntriesIfNeeded(): void {
+    if (!this.maxEntries) {
+      return;
+    }
+
+    while (this.entries.size > this.maxEntries) {
+      const oldestKey = this.entries.keys().next().value;
+      if (oldestKey === undefined) {
+        return;
+      }
+
+      this.entries.delete(oldestKey);
     }
   }
 }

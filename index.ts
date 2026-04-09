@@ -4,8 +4,10 @@ export { Cache } from "./cache/Cache";
 export { CacheManager } from "./cache/CacheManager";
 export { MemoryCacheStore } from "./cache/stores/MemoryCacheStore";
 export { NoopCacheStore } from "./cache/stores/NoopCacheStore";
+export { RedisCacheStore } from "./cache/stores/RedisCacheStore";
 export type {
   CacheEntry,
+  CacheLogger,
   CacheNamespaceOptions,
   CacheOptions,
   CacheResolver,
@@ -14,16 +16,24 @@ export type {
 } from "./cache/types";
 // Classes
 export {
+  type AggregatedLunacordStats,
+  type AutoMigrateOptions,
   type CreatePlayerOptions,
   Lunacord,
   LunacordError,
+  type LunacordLogger,
   type LunacordNodeSelectionStrategy,
   type LunacordPlugin,
   type LunacordPluginEvent,
 } from "./core/Lunacord";
 export { Node } from "./core/Node";
-export { Player } from "./core/Player";
+export { Player, type PlayerExportData, type PlayerOptions } from "./core/Player";
 export { GeniusClient } from "./lyrics/GeniusClient";
+export {
+  type GeniusOAuthExchangeOptions,
+  GeniusOAuthHelper,
+  type GeniusOAuthTokenResponse,
+} from "./lyrics/GeniusOAuthHelper";
 export { LyricsClient } from "./lyrics/LyricsClient";
 export { LyricsOvhClient } from "./lyrics/LyricsOvhClient";
 // Errors
@@ -45,6 +55,7 @@ export {
   VAPORWAVE_FILTERS,
 } from "./structures/Filter";
 export { Queue, type QueueRemoveDuplicateOptions } from "./structures/Queue";
+export { QueueHistory } from "./structures/QueueHistory";
 export type { SearchResult } from "./structures/SearchResult";
 export { Track } from "./structures/Track";
 // Types (re-export)
@@ -67,6 +78,7 @@ export type {
   RawTrack,
   ReadyPayload,
   RoutePlannerStatus,
+  SearchProviderInput,
   Stats,
   TrackEvent,
   TrackInfo,
@@ -107,4 +119,8 @@ export {
   WebSocketMessageSchema,
 } from "./types";
 export { TypedEventEmitter } from "./utils/EventEmitter";
-export { Socket } from "./websocket/Socket";
+export {
+  Socket,
+  type WebSocketFactory,
+  type WebSocketFactoryContext,
+} from "./websocket/Socket";

@@ -28,4 +28,26 @@ describe("Track", () => {
     expect(track.title).toBe("Track");
     expect(parseSpy).not.toHaveBeenCalled();
   });
+
+  it("should expose userData and pluginInfo metadata", () => {
+    const track = Track.from({
+      ...MOCK_RAW_TRACK,
+      pluginInfo: {
+        source: "custom",
+      },
+      userData: {
+        requesterId: "123",
+      },
+    });
+
+    expect(track.pluginInfo).toEqual({ source: "custom" });
+    expect(track.userData).toEqual({ requesterId: "123" });
+  });
+
+  it("should default metadata fields to empty objects", () => {
+    const track = Track.from(MOCK_RAW_TRACK);
+
+    expect(track.pluginInfo).toEqual({});
+    expect(track.userData).toEqual({});
+  });
 });

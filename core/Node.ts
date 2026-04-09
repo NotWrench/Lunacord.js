@@ -9,19 +9,28 @@ import type {
   PlayerState,
   PlayerUpdatePayload,
   ReadyPayload,
-  SearchProvider,
+  SearchProviderInput,
   Stats,
   TrackEvent,
 } from "../types";
 import { TypedEventEmitter } from "../utils/EventEmitter";
-import { Socket } from "../websocket/Socket";
-import { Player, type PlayerActionEvent } from "./Player";
+import { Socket, type WebSocketFactory } from "../websocket/Socket";
+import {
+  Player,
+  type PlayerActionEvent,
+  type PlayerExportData,
+  type PlayerOptions,
+} from "./Player";
 
 export type NodeWsEvent =
   | {
       type: "nodeDisconnect";
       code: number;
       reason: string;
+    }
+  | {
+      type: "nodeReconnectFailed";
+      attempts: number;
     }
   | {
       type: "nodeReconnecting";
@@ -34,6 +43,12 @@ export interface VoiceSocketClosedEvent {
   code: number;
   guildId: string;
   reason: string;
+}
+
+export interface NodeDebugEvent {
+  category: "player" | "voice" | "ws";
+  context?: Record<string, unknown>;
+  message: string;
 }
 
 type PlayerActionPayload<T extends PlayerActionEvent["type"]> = Omit<
@@ -54,6 +69,7 @@ export interface PlayerDisconnectEvent {
 }
 
 export interface NodeEvents {
+  debug: NodeDebugEvent;
   error: Error;
   playerConnect: PlayerConnectEvent;
   playerCreate: { guildId: string; player: Player };
@@ -64,7 +80,10 @@ export interface NodeEvents {
   playerPause: PlayerActionPayload<"playerPause">;
   playerPlay: PlayerActionPayload<"playerPlay">;
   playerQueueAdd: PlayerActionPayload<"playerQueueAdd">;
+  playerQueueAddMany: PlayerActionPayload<"playerQueueAddMany">;
+  playerQueueClear: PlayerActionPayload<"playerQueueClear">;
   playerQueueDedupe: PlayerActionPayload<"playerQueueDedupe">;
+  playerQueueEmpty: PlayerActionPayload<"playerQueueEmpty">;
   playerQueueInsert: PlayerActionPayload<"playerQueueInsert">;
   playerQueueMove: PlayerActionPayload<"playerQueueMove">;
   playerQueueRemove: PlayerActionPayload<"playerQueueRemove">;
@@ -107,6 +126,7 @@ export interface NodeOptions {
   sendGatewayPayload?: (guildId: string, payload: GatewayVoiceStatePayload) => void | Promise<void>;
   timeout?: number;
   userId: string;
+  webSocketFactory?: WebSocketFactory;
 }
 
 export interface GatewayVoiceStatePayload {
@@ -123,6 +143,13 @@ export interface VoiceConnectOptions {
   selfDeaf?: boolean;
   selfMute?: boolean;
   timeoutMs?: number;
+}
+
+export interface VoiceStateSnapshot {
+  channelId: string;
+  endpoint: string;
+  sessionId: string;
+  token: string;
 }
 
 const DEFAULT_CLIENT_NAME = "lavalink-client";
@@ -170,7 +197,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
   private connectTimeout: ReturnType<typeof setTimeout> | null = null;
   private searchResultTransformer?:
     | ((
-        context: { guildId: string; player: Player; provider?: SearchProvider; query: string },
+        context: { guildId: string; player: Player; provider?: SearchProviderInput; query: string },
         result: SearchResult
       ) => Promise<SearchResult> | SearchResult)
     | undefined;
@@ -203,6 +230,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       initialReconnectDelayMs: options.initialReconnectDelayMs,
       maxReconnectAttempts: options.maxReconnectAttempts,
       maxReconnectDelayMs: options.maxReconnectDelayMs,
+      webSocketFactory: options.webSocketFactory,
     });
 
     this.setupSocketListeners();
@@ -261,13 +289,13 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     this.socket.disconnect();
   }
 
-  createPlayer(guildId: string): Player {
+  createPlayer(guildId: string, options?: PlayerOptions): Player {
     const existing = this.players.get(guildId);
     if (existing) {
       return existing;
     }
 
-    const player = new Player(guildId, this);
+    const player = new Player(guildId, this, options);
     this.players.set(guildId, player);
     this.emit("playerCreate", { guildId, player });
     return player;
@@ -319,6 +347,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     this.voicePacketForwardingEnabled = true;
 
     if (!this.isRecord(packet)) {
+      this.emitDebug("voice", "Ignored non-object voice packet");
       return;
     }
 
@@ -326,15 +355,24 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     const packetData = packet["d"];
 
     if (typeof packetType !== "string" || !this.isRecord(packetData)) {
+      this.emitDebug("voice", "Ignored malformed voice packet", {
+        packetType: typeof packetType,
+      });
       return;
     }
 
     if (packetType === "VOICE_STATE_UPDATE") {
+      this.emitDebug("voice", "Received VOICE_STATE_UPDATE", {
+        guildId: this.getString(packetData["guild_id"]),
+      });
       this.handleVoiceStatePacket(packetData);
       return;
     }
 
     if (packetType === "VOICE_SERVER_UPDATE") {
+      this.emitDebug("voice", "Received VOICE_SERVER_UPDATE", {
+        guildId: this.getString(packetData["guild_id"]),
+      });
       this.handleVoiceServerPacket(packetData);
     }
   }
@@ -352,6 +390,11 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     const cachedState = this.voiceStates.get(guildId);
     const hasCachedVoice = Boolean(cachedState && this.voiceServers.has(guildId));
     if (cachedState?.channelId === channelId && hasCachedVoice) {
+      this.emitDebug("voice", "Reused cached voice state", {
+        guildId,
+        channelId,
+      });
+
       const player = this.players.get(guildId);
       if (player) {
         player.connected = true;
@@ -453,11 +496,31 @@ export class Node extends TypedEventEmitter<NodeEvents> {
           queueSize: event.queueSize,
         });
         return;
+      case "playerQueueAddMany":
+        this.emit("playerQueueAddMany", {
+          guildId: event.guildId,
+          tracks: event.tracks,
+          queueSize: event.queueSize,
+        });
+        return;
+      case "playerQueueClear":
+        this.emit("playerQueueClear", {
+          guildId: event.guildId,
+          clearedCount: event.clearedCount,
+          queueSize: event.queueSize,
+        });
+        return;
       case "playerQueueDedupe":
         this.emit("playerQueueDedupe", {
           guildId: event.guildId,
           removedCount: event.removedCount,
           by: event.by,
+        });
+        return;
+      case "playerQueueEmpty":
+        this.emit("playerQueueEmpty", {
+          guildId: event.guildId,
+          reason: event.reason,
         });
         return;
       case "playerQueueInsert":
@@ -542,6 +605,10 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     this.socket.on("ready", (payload) => {
       this.sessionId = payload.sessionId;
       this.syncedVoiceStateKeys.clear();
+      this.emitDebug("ws", "Socket ready", {
+        resumed: payload.resumed,
+        sessionId: payload.sessionId,
+      });
 
       if (this.options.resume) {
         this.rest.updateSession(this.sessionId, true, this.options.timeout).catch((err) => {
@@ -578,10 +645,17 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     });
 
     this.socket.on("error", (error) => {
+      this.emitDebug("ws", "Socket error", {
+        message: error.message,
+      });
       this.emit("error", error);
     });
 
     this.socket.on("reconnecting", ({ attempt, delay }) => {
+      this.emitDebug("ws", "Socket reconnecting", {
+        attempt,
+        delay,
+      });
       this.emit("ws", {
         type: "nodeReconnecting",
         attempt,
@@ -590,10 +664,24 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     });
 
     this.socket.on("close", ({ code, reason }) => {
+      this.emitDebug("ws", "Socket closed", {
+        code,
+        reason,
+      });
       this.emit("ws", {
         type: "nodeDisconnect",
         code,
         reason,
+      });
+    });
+
+    this.socket.on("reconnectFailed", ({ attempts }) => {
+      this.emitDebug("ws", "Socket reconnect attempts exhausted", {
+        attempts,
+      });
+      this.emit("ws", {
+        type: "nodeReconnectFailed",
+        attempts,
       });
     });
   }
@@ -659,6 +747,10 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       case "TrackEndEvent": {
         const track = Track.fromValidated(event.track);
         player.current = null;
+        player.endTime = null;
+        if (event.reason !== "cleanup" && event.reason !== "stopped") {
+          player.pushHistory(track);
+        }
         this.emit("trackEnd", { player, track, reason: event.reason });
         void this.handleQueueAdvance(player, event.reason, track);
         break;
@@ -703,6 +795,45 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       sessionId: state.sessionId,
       token: server.token,
     };
+  }
+
+  getVoiceChannelId(guildId: string): string | undefined {
+    return this.voiceStates.get(guildId)?.channelId;
+  }
+
+  getVoiceStateSnapshot(guildId: string): VoiceStateSnapshot | undefined {
+    const state = this.voiceStates.get(guildId);
+    const server = this.voiceServers.get(guildId);
+
+    if (!state || !server) {
+      return undefined;
+    }
+
+    return {
+      channelId: state.channelId,
+      endpoint: server.endpoint,
+      sessionId: state.sessionId,
+      token: server.token,
+    };
+  }
+
+  setVoiceStateSnapshot(guildId: string, snapshot: VoiceStateSnapshot | undefined): void {
+    if (!snapshot) {
+      this.voiceStates.delete(guildId);
+      this.voiceServers.delete(guildId);
+      this.syncedVoiceStateKeys.delete(guildId);
+      return;
+    }
+
+    this.voiceStates.set(guildId, {
+      channelId: snapshot.channelId,
+      sessionId: snapshot.sessionId,
+    });
+    this.voiceServers.set(guildId, {
+      endpoint: snapshot.endpoint,
+      token: snapshot.token,
+    });
+    this.syncedVoiceStateKeys.delete(guildId);
   }
 
   private handleVoiceServerPacket(packetData: Record<string, unknown>): void {
@@ -827,9 +958,28 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     try {
       await this.rest.updatePlayer(sessionId, guildId, { voice: voicePayload });
       this.syncedVoiceStateKeys.set(guildId, voiceKey);
+      this.emitDebug("voice", "Synchronized voice state to Lavalink", {
+        guildId,
+      });
     } catch (error) {
+      this.emitDebug("voice", "Failed to synchronize voice state", {
+        guildId,
+        message: error instanceof Error ? error.message : String(error),
+      });
       this.emit("error", error instanceof Error ? error : new Error(String(error)));
     }
+  }
+
+  private emitDebug(
+    category: NodeDebugEvent["category"],
+    message: string,
+    context?: Record<string, unknown>
+  ): void {
+    this.emit("debug", {
+      category,
+      message,
+      context,
+    });
   }
 
   private waitForVoice(guildId: string, timeoutMs: number): Promise<void> {
@@ -883,12 +1033,19 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
       if (!player.queue.isEmpty) {
         await player.play();
+      } else {
+        player.notifyQueueEmpty("trackEnd");
       }
 
       return;
     }
 
-    if (!this.shouldAutoAdvance(reason) || player.queue.isEmpty) {
+    if (!this.shouldAutoAdvance(reason)) {
+      return;
+    }
+
+    if (player.queue.isEmpty) {
+      player.notifyQueueEmpty("trackEnd");
       return;
     }
 
@@ -908,7 +1065,12 @@ export class Node extends TypedEventEmitter<NodeEvents> {
   setSearchResultTransformer(
     transformer:
       | ((
-          context: { guildId: string; player: Player; provider?: SearchProvider; query: string },
+          context: {
+            guildId: string;
+            player: Player;
+            provider?: SearchProviderInput;
+            query: string;
+          },
           result: SearchResult
         ) => Promise<SearchResult> | SearchResult)
       | undefined
@@ -917,7 +1079,7 @@ export class Node extends TypedEventEmitter<NodeEvents> {
   }
 
   async transformSearchResult(
-    context: { guildId: string; player: Player; provider?: SearchProvider; query: string },
+    context: { guildId: string; player: Player; provider?: SearchProviderInput; query: string },
     result: SearchResult
   ): Promise<SearchResult> {
     return (await this.searchResultTransformer?.(context, result)) ?? result;
@@ -937,6 +1099,10 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       if (snapshot.position > 0) {
         payload.position = snapshot.position;
       }
+    }
+
+    if (snapshot.endTime !== null) {
+      payload.endTime = snapshot.endTime;
     }
 
     if (snapshot.volume !== 100) {
@@ -960,5 +1126,15 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     await this.rest.updatePlayer(this.sessionId, player.guildId, payload);
+  }
+
+  async importPlayer(
+    guildId: string,
+    snapshot: PlayerExportData,
+    options?: PlayerOptions
+  ): Promise<Player> {
+    const player = this.createPlayer(guildId, options);
+    await player.import(snapshot);
+    return player;
   }
 }

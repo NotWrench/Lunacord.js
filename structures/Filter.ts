@@ -72,6 +72,19 @@ export class Filter {
     this.adapter.onClear?.(this.value);
   }
 
+  applyLocally(filters: Filters): void {
+    this.filters = cloneFilters(filters);
+  }
+
+  getPlaybackRate(): number {
+    const speed = this.filters.timescale?.speed;
+    const rate = this.filters.timescale?.rate;
+    const normalizedSpeed =
+      typeof speed === "number" && Number.isFinite(speed) && speed > 0 ? speed : 1;
+    const normalizedRate = typeof rate === "number" && Number.isFinite(rate) && rate > 0 ? rate : 1;
+    return normalizedSpeed * normalizedRate;
+  }
+
   setBassboost(): Promise<void> {
     return this.set(BASSBOOST_FILTERS);
   }

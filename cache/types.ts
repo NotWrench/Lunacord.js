@@ -4,6 +4,13 @@ export interface CacheSetOptions {
 
 export interface CacheNamespaceOptions {
   defaultTtlMs?: number;
+  logger?: CacheLogger;
+}
+
+export interface CacheLogger {
+  debug?: (message: string, data?: unknown) => void;
+  error?: (message: string, data?: unknown) => void;
+  warn?: (message: string, data?: unknown) => void;
 }
 
 export interface CacheStore {
@@ -23,11 +30,13 @@ export type CacheResolver<T> = () => Promise<T> | T;
 
 export interface MemoryCacheOptions {
   cleanupIntervalMs?: number;
+  maxEntries?: number;
 }
 
 export interface CacheOptions {
   defaultTtlMs?: number;
   enabled?: boolean;
+  logger?: CacheLogger;
   memory?: MemoryCacheOptions;
   prefix?: string;
   store?: CacheStore;

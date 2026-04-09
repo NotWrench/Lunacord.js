@@ -10,11 +10,13 @@ export enum SearchProvider {
   AppleMusic = "amsearch",
 }
 
+export type SearchProviderInput = SearchProvider | string;
+
 export const DEFAULT_SEARCH_PROVIDER = SearchProvider.YouTube;
 
 export const buildSearchIdentifier = (
   query: string,
-  provider: SearchProvider = DEFAULT_SEARCH_PROVIDER
+  provider: SearchProviderInput = DEFAULT_SEARCH_PROVIDER
 ): string => `${provider}:${query}`;
 
 // --- Exception ---
@@ -76,6 +78,14 @@ export const LyricsSchema = z.object({
   artist: z.string(),
   url: z.string(),
   lyricsText: z.string(),
+  syncedLyrics: z
+    .array(
+      z.object({
+        timeMs: z.number(),
+        text: z.string(),
+      })
+    )
+    .optional(),
   albumArtUrl: z.string().nullable().optional(),
   releaseDate: z.string().nullable().optional(),
   geniusId: z.number().optional(),

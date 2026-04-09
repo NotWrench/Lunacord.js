@@ -9,16 +9,18 @@ import {
   VAPORWAVE_FILTERS,
 } from "../structures/Filter";
 import { Queue, type QueueRemoveDuplicateOptions } from "../structures/Queue";
+import { QueueHistory } from "../structures/QueueHistory";
 import type { SearchResult } from "../structures/SearchResult";
 import { toSearchResult } from "../structures/SearchResult";
-import type { Track } from "../structures/Track";
+import { Track, type Track as TrackType } from "../structures/Track";
 import type {
   Filters,
   LyricsRequestOptions,
   LyricsResult,
   PlayerState,
   PlayerUpdatePayload,
-  SearchProvider,
+  RawTrack,
+  SearchProviderInput,
 } from "../types";
 import type { VoiceConnectOptions } from "./Node";
 
@@ -56,6 +58,18 @@ export type PlayerActionEvent =
       track: Track;
     }
   | {
+      type: "playerQueueAddMany";
+      guildId: string;
+      queueSize: number;
+      tracks: Track[];
+    }
+  | {
+      type: "playerQueueClear";
+      clearedCount: number;
+      guildId: string;
+      queueSize: number;
+    }
+  | {
       from: number;
       guildId: string;
       to: number;
@@ -79,6 +93,11 @@ export type PlayerActionEvent =
       guildId: string;
       queueSize: number;
       type: "playerQueueShuffle";
+    }
+  | {
+      guildId: string;
+      reason: "manual" | "trackEnd";
+      type: "playerQueueEmpty";
     }
   | {
       type: "playerResume";
@@ -132,21 +151,45 @@ export interface PlayerNodeAdapter {
   destroyPlayer?: (guildId: string) => Promise<void>;
   disconnectVoice?: (guildId: string) => Promise<void>;
   emitPlayerEvent?: (event: PlayerActionEvent) => void;
+  getVoiceChannelId?: (guildId: string) => string | undefined;
   getVoicePayload?: (guildId: string) => NonNullable<PlayerUpdatePayload["voice"]> | undefined;
   readonly lyricsClient?: LyricsClient;
   readonly rest: Pick<Rest, "loadTracks" | "search" | "updatePlayer">;
   readonly sessionId: string | null;
   transformSearchResult?: (
-    context: { guildId: string; player: Player; provider?: SearchProvider; query: string },
+    context: { guildId: string; player: Player; provider?: SearchProviderInput; query: string },
     result: SearchResult
   ) => Promise<SearchResult> | SearchResult;
 }
 
+export interface PlayerOptions {
+  historyMaxSize?: number;
+  onQueueEmpty?: (player: Player, reason: "manual" | "trackEnd") => Promise<void> | void;
+}
+
+export interface PlayerExportData {
+  connected: boolean;
+  current: RawTrack | null;
+  endTime: number | null;
+  filters: Filters;
+  history: RawTrack[];
+  paused: boolean;
+  position: number;
+  queue: RawTrack[];
+  repeatQueueEnabled: boolean;
+  repeatTrackEnabled: boolean;
+  shouldResume: boolean;
+  voiceChannelId: string | null;
+  volume: number;
+}
+
 export class Player {
   readonly guildId: string;
+  readonly history: QueueHistory;
   readonly queue = new Queue();
   readonly filter: Filter;
   current: Track | null = null;
+  endTime: number | null = null;
   paused = false;
   volume = 100;
   position = 0;
@@ -158,10 +201,13 @@ export class Player {
   private lastUpdateAt = 0;
 
   private readonly node: PlayerNodeAdapter;
+  private readonly options: PlayerOptions;
 
-  constructor(guildId: string, node: PlayerNodeAdapter) {
+  constructor(guildId: string, node: PlayerNodeAdapter, options: PlayerOptions = {}) {
     this.guildId = guildId;
     this.node = node;
+    this.options = options;
+    this.history = new QueueHistory(options.historyMaxSize);
     this.filter = new Filter({
       guildId,
       getSessionId: () => this.getSessionId(),
@@ -265,6 +311,7 @@ export class Player {
     this.current = target;
     this.paused = false;
     this.position = 0;
+    this.endTime = null;
     this.lastStateTime = Date.now();
     this.lastUpdateAt = this.lastStateTime;
 
@@ -307,6 +354,7 @@ export class Player {
   async stop(destroyPlayer = true, disconnectVoice = true): Promise<void> {
     this.current = null;
     this.position = 0;
+    this.endTime = null;
     this.lastStateTime = 0;
     this.lastUpdateAt = 0;
     await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, {
@@ -385,6 +433,8 @@ export class Player {
       return;
     }
 
+    this.pushHistory(skippedTrack);
+
     if (this.repeatTrackEnabled) {
       await this.stop(false, false);
       await this.play(skippedTrack);
@@ -409,6 +459,8 @@ export class Player {
     if (!this.queue.isEmpty) {
       await this.play();
       nextTrack = this.current;
+    } else {
+      this.notifyQueueEmpty("manual");
     }
 
     this.emitActionEvent({
@@ -420,7 +472,7 @@ export class Player {
     });
   }
 
-  async search(query: string, provider?: SearchProvider): Promise<SearchResult> {
+  async search(query: string, provider?: SearchProviderInput): Promise<SearchResult> {
     const result = await this.node.rest.search(query, provider);
     const searchResult = toSearchResult(result);
     return (
@@ -436,7 +488,7 @@ export class Player {
     );
   }
 
-  async searchAndPlay(query: string, provider?: SearchProvider): Promise<SearchResult> {
+  async searchAndPlay(query: string, provider?: SearchProviderInput): Promise<SearchResult> {
     const result = await this.search(query, provider);
 
     if (result.loadType === "empty" || result.loadType === "error" || result.tracks.length === 0) {
@@ -444,7 +496,7 @@ export class Player {
     }
 
     const tracksToQueue = result.loadType === "playlist" ? result.tracks : [result.tracks[0]!];
-    this.enqueueTracks(tracksToQueue);
+    this.addMany(tracksToQueue);
 
     if (!this.current) {
       await this.play();
@@ -462,6 +514,20 @@ export class Player {
     });
   }
 
+  addMany(tracks: Track[]): void {
+    if (tracks.length === 0) {
+      return;
+    }
+
+    this.queue.enqueueMany(tracks);
+    this.emitActionEvent({
+      type: "playerQueueAddMany",
+      guildId: this.guildId,
+      tracks,
+      queueSize: this.queue.size,
+    });
+  }
+
   remove(index: number): Track | undefined {
     const removed = this.queue.remove(index);
     if (removed) {
@@ -475,12 +541,6 @@ export class Player {
     }
 
     return removed;
-  }
-
-  private enqueueTracks(tracks: Track[]): void {
-    for (const track of tracks) {
-      this.add(track);
-    }
   }
 
   insert(index: number, track: Track): void {
@@ -524,8 +584,23 @@ export class Player {
     return removedCount;
   }
 
+  clearQueue(): void {
+    const clearedCount = this.queue.size;
+    this.queue.clear();
+    this.emitActionEvent({
+      type: "playerQueueClear",
+      guildId: this.guildId,
+      clearedCount,
+      queueSize: this.queue.size,
+    });
+  }
+
   getQueue(): Track[] {
     return this.queue.toArray();
+  }
+
+  playNext(track: Track): void {
+    this.insert(0, track);
   }
 
   async getLyricsFor(track: Track, options?: LyricsRequestOptions): Promise<LyricsResult> {
@@ -566,6 +641,14 @@ export class Player {
     });
   }
 
+  async setEndTime(positionMs: number): Promise<void> {
+    const nextEndTime = Math.max(0, positionMs);
+    this.endTime = nextEndTime;
+    await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, {
+      endTime: nextEndTime,
+    });
+  }
+
   getEstimatedPosition(): number {
     if (!this.current) {
       return 0;
@@ -576,7 +659,12 @@ export class Player {
     }
 
     const elapsed = Math.max(0, Date.now() - this.lastUpdateAt);
-    return clampPosition(this.position + elapsed, this.current);
+    const rate = this.getPlaybackRate();
+    return clampPosition(this.position + elapsed * rate, this.current);
+  }
+
+  private getPlaybackRate(): number {
+    return this.filter.getPlaybackRate();
   }
 
   applyState(state: PlayerState): void {
@@ -589,7 +677,9 @@ export class Player {
 
   getRestoreState(): {
     current: Track | null;
+    endTime: number | null;
     filters: Filters;
+    history: Track[];
     paused: boolean;
     position: number;
     queue: Track[];
@@ -599,7 +689,9 @@ export class Player {
   } {
     return {
       current: this.current,
+      endTime: this.endTime,
       filters: this.filters,
+      history: this.history.toArray(),
       paused: this.paused,
       position: this.getEstimatedPosition(),
       queue: this.getQueue(),
@@ -608,9 +700,142 @@ export class Player {
       volume: this.volume,
     };
   }
+
+  export(): PlayerExportData {
+    return {
+      connected: this.connected,
+      current: this.current?.toJSON() ?? null,
+      endTime: this.endTime,
+      filters: this.filters,
+      history: this.history.toArray().map((track) => track.toJSON()),
+      paused: this.paused,
+      position: this.getEstimatedPosition(),
+      queue: this.getQueue().map((track) => track.toJSON()),
+      repeatQueueEnabled: this.repeatQueueEnabled,
+      repeatTrackEnabled: this.repeatTrackEnabled,
+      shouldResume: Boolean(this.current && !this.paused),
+      voiceChannelId: this.node.getVoiceChannelId?.(this.guildId) ?? null,
+      volume: this.volume,
+    };
+  }
+
+  async import(data: PlayerExportData): Promise<void> {
+    this.queue.clear();
+    this.history.clear();
+
+    this.current = data.current ? Track.from(data.current) : null;
+    this.endTime = data.endTime;
+    this.paused = data.paused;
+    this.position = data.position;
+    this.connected = data.connected;
+    this.volume = data.volume;
+    this.repeatQueueEnabled = data.repeatQueueEnabled;
+    this.repeatTrackEnabled = data.repeatTrackEnabled;
+
+    if (data.queue.length > 0) {
+      this.queue.enqueueMany(data.queue.map((track) => Track.from(track)));
+    }
+
+    for (const rawTrack of [...data.history].reverse()) {
+      this.history.push(Track.from(rawTrack));
+    }
+
+    this.filter.applyLocally(data.filters);
+
+    if (!this.current || !data.shouldResume || !this.node.sessionId) {
+      return;
+    }
+
+    const payload: PlayerUpdatePayload = {
+      track: { encoded: this.current.encoded },
+      paused: this.paused,
+      position: this.position,
+      filters: this.filters,
+      volume: this.volume,
+    };
+
+    if (this.endTime !== null) {
+      payload.endTime = this.endTime;
+    }
+
+    const voicePayload = this.node.getVoicePayload?.(this.guildId);
+    if (voicePayload) {
+      payload.voice = voicePayload;
+    }
+
+    await this.node.rest.updatePlayer(this.getSessionId(), this.guildId, payload);
+  }
+
+  rewindTrack(): Track | null {
+    const previousTrack = this.history.pop();
+    if (!previousTrack) {
+      return null;
+    }
+
+    if (this.current) {
+      this.playNext(previousTrack);
+    } else {
+      this.add(previousTrack);
+    }
+    return previousTrack;
+  }
+
+  previous(): Track | null {
+    return this.rewindTrack();
+  }
+
+  async getLyricsForHistory(index: number, options?: LyricsRequestOptions): Promise<LyricsResult> {
+    const track = this.history.toArray()[index];
+    if (!track) {
+      return {
+        status: "not_found",
+      };
+    }
+
+    return this.getLyricsFor(track, options);
+  }
+
+  getCurrentLyricLine(lyrics: LyricsResult): string | null {
+    if (lyrics.status !== "found" || !lyrics.lyrics.syncedLyrics || !this.current) {
+      return null;
+    }
+
+    const position = this.getEstimatedPosition();
+    let currentLine: string | null = null;
+
+    for (const line of lyrics.lyrics.syncedLyrics) {
+      if (line.timeMs > position) {
+        break;
+      }
+
+      currentLine = line.text;
+    }
+
+    return currentLine;
+  }
+
+  getCreationOptions(): PlayerOptions {
+    return {
+      historyMaxSize: this.options.historyMaxSize,
+      onQueueEmpty: this.options.onQueueEmpty,
+    };
+  }
+
+  pushHistory(track: Track): void {
+    this.history.push(track);
+  }
+
+  notifyQueueEmpty(reason: "manual" | "trackEnd"): void {
+    this.emitActionEvent({
+      type: "playerQueueEmpty",
+      guildId: this.guildId,
+      reason,
+    });
+    void this.options.onQueueEmpty?.(this, reason);
+  }
 }
 
-const clampPosition = (positionMs: number, track: Track): number => {
+const clampPosition = (positionMs: number, track: TrackType): number => {
   const nonNegativePosition = Math.max(0, positionMs);
   if (track.isStream) {
     return nonNegativePosition;

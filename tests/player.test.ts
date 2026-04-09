@@ -5,9 +5,16 @@ import { Player } from "../core/Player";
 import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Filter } from "../structures/Filter";
 import { Queue } from "../structures/Queue";
+import { QueueHistory } from "../structures/QueueHistory";
 import type { SearchResult } from "../structures/SearchResult";
 import { Track } from "../structures/Track";
-import { type Filters, type LoadResult, type RawTrack, SearchProvider } from "../types";
+import {
+  type Filters,
+  type LoadResult,
+  type RawTrack,
+  SearchProvider,
+  type SearchProviderInput,
+} from "../types";
 
 const MOCK_RAW_TRACK: RawTrack = {
   encoded: "QAABJAMACk5ldmVyIEdvbm5h...",
@@ -46,7 +53,7 @@ const MOCK_RAW_TRACK_2: RawTrack = {
 const createMockNode = (): MockPlayerNode => {
   const updatePlayer = mock(() => Promise.resolve());
   const search = mock(
-    (query: string, provider?: SearchProvider): Promise<LoadResult> =>
+    (query: string, provider?: SearchProviderInput): Promise<LoadResult> =>
       Promise.resolve({
         loadType: "search",
         data: [MOCK_RAW_TRACK_2],
@@ -126,12 +133,48 @@ describe("Player", () => {
   describe("add", () => {
     it("should expose a Queue instance", () => {
       expect(player.queue).toBeInstanceOf(Queue);
+      expect(player.history).toBeInstanceOf(QueueHistory);
     });
 
     it("should add a track to the queue", () => {
       player.add(track);
       expect(player.queue.size).toBe(1);
       expect(player.queue.peek()?.title).toBe("Never Gonna Give You Up");
+    });
+
+    it("should add many tracks with a single batched event", () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      player.addMany([track, track2]);
+
+      expect(player.queue.size).toBe(2);
+      expect(emitPlayerEvent).toHaveBeenCalledTimes(1);
+      expect(emitPlayerEvent).toHaveBeenCalledWith({
+        type: "playerQueueAddMany",
+        guildId: "guild-123",
+        tracks: [track, track2],
+        queueSize: 2,
+      });
+    });
+  });
+
+  describe("clearQueue", () => {
+    it("should clear queue and emit a clear event", () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+      player.add(track);
+      player.add(track2);
+
+      player.clearQueue();
+
+      expect(player.queue.size).toBe(0);
+      expect(emitPlayerEvent).toHaveBeenLastCalledWith({
+        type: "playerQueueClear",
+        guildId: "guild-123",
+        clearedCount: 2,
+        queueSize: 0,
+      });
     });
   });
 
@@ -733,6 +776,142 @@ describe("Player", () => {
     });
   });
 
+  describe("history", () => {
+    it("should push skipped tracks into history and allow rewinding", async () => {
+      player.current = track;
+      player.add(track2);
+
+      await player.skip();
+
+      expect(player.history.peek()).toBe(track);
+      const previous = player.previous();
+      expect(previous).toBe(track);
+      expect(player.queue.peek()).toBe(track);
+    });
+
+    it("should fetch lyrics for a history track", async () => {
+      player.pushHistory(track);
+
+      const result = await player.getLyricsForHistory(0);
+
+      expect(result).toMatchObject({ status: "found" });
+      expect(mockNode.lyricsClient?.getLyricsForTrack).toHaveBeenCalledWith(track, undefined);
+    });
+  });
+
+  describe("playNext", () => {
+    it("should insert the track at the front of the queue", () => {
+      player.add(track2);
+
+      player.playNext(track);
+
+      expect(player.queue.toArray()).toEqual([track, track2]);
+    });
+  });
+
+  describe("setEndTime", () => {
+    it("should update the player end time through REST", async () => {
+      await player.setEndTime(30_000);
+
+      expect(player.endTime).toBe(30_000);
+      expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
+        endTime: 30_000,
+      });
+    });
+  });
+
+  describe("export/import", () => {
+    it("should export and import player state", async () => {
+      mockNode.getVoiceChannelId = mock(() => "channel-123");
+      player.current = track;
+      player.volume = 75;
+      player.paused = true;
+      player.endTime = 12_000;
+      player.repeatQueue(true);
+      player.add(track2);
+      player.pushHistory(track);
+      await player.setFilters({
+        timescale: {
+          speed: 1.1,
+        },
+      });
+
+      const snapshot = player.export();
+      const importedNode = createMockNode();
+      importedNode.getVoiceChannelId = mock(() => "channel-123");
+      const importedPlayer = new Player("guild-456", importedNode);
+
+      await importedPlayer.import(snapshot);
+
+      expect(importedPlayer.current?.title).toBe(track.title);
+      expect(importedPlayer.queue.peek()?.title).toBe(track2.title);
+      expect(importedPlayer.history.peek()?.title).toBe(track.title);
+      expect(importedPlayer.volume).toBe(75);
+      expect(importedPlayer.endTime).toBe(12_000);
+      expect(importedPlayer.isRepeatQueueEnabled).toBe(true);
+    });
+
+    it("should import filters locally without emitting filter update events", async () => {
+      await player.setFilters({
+        timescale: {
+          speed: 1.1,
+        },
+      });
+      player.add(track);
+      const snapshot = player.export();
+
+      const importedNode = createMockNode();
+      const emitPlayerEvent = mock(() => {});
+      importedNode.emitPlayerEvent = emitPlayerEvent;
+      const importedPlayer = new Player("guild-456", importedNode);
+
+      await importedPlayer.import(snapshot);
+
+      const eventTypes = getMockEvents(emitPlayerEvent)
+        .filter(isEventWithType)
+        .map((event) => event.type);
+
+      expect(eventTypes).not.toContain("playerFiltersUpdate");
+      expect(eventTypes).not.toContain("playerQueueClear");
+      expect(eventTypes).not.toContain("playerQueueAddMany");
+      expect(importedNode.rest.updatePlayer).not.toHaveBeenCalled();
+      expect(importedPlayer.filters.timescale?.speed).toBe(1.1);
+      expect(importedPlayer.queue.size).toBe(1);
+    });
+  });
+
+  describe("synced lyrics", () => {
+    it("should return the current synced lyric line", () => {
+      let now = 1_000;
+      spyOn(Date, "now").mockImplementation(() => now);
+      player.current = track;
+      player.connected = true;
+      player.applyState({
+        connected: true,
+        ping: 0,
+        position: 5_000,
+        time: Date.now(),
+      });
+      now += 2_000;
+
+      const line = player.getCurrentLyricLine({
+        status: "found",
+        lyrics: {
+          title: track.title,
+          artist: track.author,
+          url: "https://example.com",
+          lyricsText: "Line 1\nLine 2",
+          syncedLyrics: [
+            { timeMs: 4_000, text: "Line 1" },
+            { timeMs: 6_000, text: "Line 2" },
+          ],
+        },
+      });
+
+      expect(line).toBe("Line 2");
+    });
+  });
+
   describe("estimated position", () => {
     it("should interpolate playback position while playing", () => {
       player.current = track;
@@ -750,6 +929,7 @@ describe("Player", () => {
 
       expect(player.getEstimatedPosition()).toBe(7_000);
       expect(player.ping).toBe(42);
+      nowSpy.mockRestore();
     });
 
     it("should use local receipt time instead of the server clock for interpolation", () => {
@@ -767,6 +947,7 @@ describe("Player", () => {
       nowSpy.mockReturnValue(1_002_000);
 
       expect(player.getEstimatedPosition()).toBe(7_000);
+      nowSpy.mockRestore();
     });
 
     it("should not advance while paused", () => {
@@ -784,6 +965,77 @@ describe("Player", () => {
       nowSpy.mockReturnValue(1_002_000);
 
       expect(player.getEstimatedPosition()).toBe(5_000);
+      nowSpy.mockRestore();
+    });
+
+    it("should apply timescale speed when estimating position", async () => {
+      player.current = track;
+      player.connected = true;
+      player.paused = false;
+      await player.setFilters({
+        timescale: {
+          speed: 2,
+        },
+      });
+      const nowSpy = spyOn(Date, "now");
+      nowSpy.mockReturnValue(1_000_000);
+      player.applyState({
+        time: 1_000_000,
+        position: 5_000,
+        connected: true,
+        ping: 42,
+      });
+      nowSpy.mockReturnValue(1_002_000);
+
+      expect(player.getEstimatedPosition()).toBe(9_000);
+      nowSpy.mockRestore();
+    });
+
+    it("should apply slower timescale speed when estimating position", async () => {
+      player.current = track;
+      player.connected = true;
+      player.paused = false;
+      await player.setFilters({
+        timescale: {
+          speed: 0.5,
+        },
+      });
+      const nowSpy = spyOn(Date, "now");
+      nowSpy.mockReturnValue(1_000_000);
+      player.applyState({
+        time: 1_000_000,
+        position: 5_000,
+        connected: true,
+        ping: 42,
+      });
+      nowSpy.mockReturnValue(1_002_000);
+
+      expect(player.getEstimatedPosition()).toBe(6_000);
+      nowSpy.mockRestore();
+    });
+
+    it("should apply combined timescale speed and rate when estimating position", async () => {
+      player.current = track;
+      player.connected = true;
+      player.paused = false;
+      await player.setFilters({
+        timescale: {
+          speed: 2,
+          rate: 1.5,
+        },
+      });
+      const nowSpy = spyOn(Date, "now");
+      nowSpy.mockReturnValue(1_000_000);
+      player.applyState({
+        time: 1_000_000,
+        position: 5_000,
+        connected: true,
+        ping: 42,
+      });
+      nowSpy.mockReturnValue(1_002_000);
+
+      expect(player.getEstimatedPosition()).toBe(11_000);
+      nowSpy.mockRestore();
     });
   });
 
@@ -838,7 +1090,7 @@ describe("Player", () => {
         getMockEvents(emitPlayerEvent)
           .filter(isEventWithType)
           .map((event) => event.type)
-      ).toContain("playerQueueAdd");
+      ).toContain("playerQueueAddMany");
     });
 
     it("should enqueue all playlist tracks", async () => {
@@ -868,7 +1120,7 @@ describe("Player", () => {
         getMockEvents(emitPlayerEvent)
           .filter(isEventWithType)
           .map((event) => event.type)
-      ).toEqual(["playerQueueAdd", "playerQueueAdd", "playerPlay"]);
+      ).toEqual(["playerQueueAddMany", "playerPlay"]);
     });
 
     it("should not mutate playback state for empty results", async () => {
