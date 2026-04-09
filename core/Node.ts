@@ -29,6 +29,10 @@ export type NodeWsEvent =
       reason: string;
     }
   | {
+      type: "nodeReconnectFailed";
+      attempts: number;
+    }
+  | {
       type: "nodeReconnecting";
       attempt: number;
       delay: number;
@@ -668,6 +672,16 @@ export class Node extends TypedEventEmitter<NodeEvents> {
         type: "nodeDisconnect",
         code,
         reason,
+      });
+    });
+
+    this.socket.on("reconnectFailed", ({ attempts }) => {
+      this.emitDebug("ws", "Socket reconnect attempts exhausted", {
+        attempts,
+      });
+      this.emit("ws", {
+        type: "nodeReconnectFailed",
+        attempts,
       });
     });
   }

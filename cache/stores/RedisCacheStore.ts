@@ -44,9 +44,15 @@ export class RedisCacheStore {
   }
 
   async set<T>(key: string, value: T, options?: CacheSetOptions): Promise<void> {
-    if (options?.ttlMs) {
+    const ttlMs = options?.ttlMs;
+    if (typeof ttlMs === "number") {
+      if (ttlMs <= 0) {
+        await this.client.del(key);
+        return;
+      }
+
       await this.client.set(key, JSON.stringify(value), {
-        PX: options.ttlMs,
+        PX: ttlMs,
       });
       return;
     }

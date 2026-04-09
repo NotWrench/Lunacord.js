@@ -388,6 +388,28 @@ describe("Lunacord", () => {
     expect(lunacord.getPlayer("guild-move")).toBe(moved);
   });
 
+  it("should keep source player mapping when movePlayer import fails", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeA!.rest.destroyPlayer = mock(() => Promise.resolve());
+    nodeB!.sessionId = "session-b";
+    nodeB!.rest.destroyPlayer = mock(() => Promise.resolve());
+    nodeB!.rest.updatePlayer = mock(() => Promise.reject(new Error("import failed")));
+
+    const sourcePlayer = lunacord.createPlayer("guild-move-fail", {
+      preferredNodeIds: ["node-a"],
+    });
+    sourcePlayer.current = new Track(MOCK_RAW_TRACK);
+
+    await expect(lunacord.movePlayer("guild-move-fail", "node-b")).rejects.toThrow("import failed");
+
+    expect(lunacord.getPlayer("guild-move-fail")).toBe(sourcePlayer);
+    expect(nodeA!.getPlayer("guild-move-fail")).toBe(sourcePlayer);
+    expect(nodeB!.getPlayer("guild-move-fail")).toBeUndefined();
+  });
+
   it("should remove a node by migrating its players first", async () => {
     const lunacord = new Lunacord(BASE_OPTIONS);
     const [nodeA, nodeB] = lunacord.getNodes();
@@ -963,7 +985,7 @@ describe("Lunacord", () => {
     expect(result).toBeUndefined();
   });
 
-  it("should auto migrate players on node disconnect when enabled", async () => {
+  it("should auto migrate players when reconnect attempts are exhausted", async () => {
     const lunacord = new Lunacord({
       ...BASE_OPTIONS,
       autoMigrateOnDisconnect: true,
@@ -981,9 +1003,8 @@ describe("Lunacord", () => {
     player.current = new Track(MOCK_RAW_TRACK);
 
     nodeA!.emit("ws", {
-      type: "nodeDisconnect",
-      code: 1006,
-      reason: "boom",
+      type: "nodeReconnectFailed",
+      attempts: 5,
     });
     await Promise.resolve();
     await Promise.resolve();
@@ -1026,9 +1047,8 @@ describe("Lunacord", () => {
     player.current = new Track(MOCK_RAW_TRACK);
 
     nodeA!.emit("ws", {
-      type: "nodeDisconnect",
-      code: 1006,
-      reason: "boom",
+      type: "nodeReconnectFailed",
+      attempts: 5,
     });
 
     await Promise.resolve();
@@ -1063,9 +1083,8 @@ describe("Lunacord", () => {
     player.current = new Track(MOCK_RAW_TRACK);
 
     nodeA!.emit("ws", {
-      type: "nodeDisconnect",
-      code: 1006,
-      reason: "boom",
+      type: "nodeReconnectFailed",
+      attempts: 5,
     });
 
     await Promise.resolve();
@@ -1075,6 +1094,35 @@ describe("Lunacord", () => {
     expect(migrationFailures[0]).toContain(
       "guild-no-target:node-a:none:No migration target is available for node node-a"
     );
+  });
+
+  it("should not auto migrate players on transient nodeDisconnect", async () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      autoMigrateOnDisconnect: true,
+    });
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+    nodeA!.rest.destroyPlayer = mock(() => Promise.resolve());
+    nodeB!.rest.updatePlayer = mock(() => Promise.resolve());
+
+    const player = lunacord.createPlayer("guild-no-migrate-on-close", {
+      preferredNodeIds: ["node-a"],
+    });
+    player.current = new Track(MOCK_RAW_TRACK);
+
+    nodeA!.emit("ws", {
+      type: "nodeDisconnect",
+      code: 1006,
+      reason: "temporary",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(nodeA!.getPlayer("guild-no-migrate-on-close")).toBeDefined();
+    expect(nodeB!.getPlayer("guild-no-migrate-on-close")).toBeUndefined();
   });
 
   it("should aggregate node stats", () => {
@@ -1133,6 +1181,38 @@ describe("Lunacord", () => {
     expect(debug).toHaveBeenCalled();
     expect(warn).toHaveBeenCalled();
     expect(error).toHaveBeenCalled();
+  });
+
+  it("should preserve cache-specific logger when top-level logger is undefined", async () => {
+    const cacheWarn = mock(() => {});
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      cache: {
+        logger: {
+          warn: cacheWarn,
+        },
+      },
+    });
+
+    const store = {
+      clear: () => Promise.resolve(),
+      delete: () => Promise.reject(new Error("delete failed")),
+      get: () => Promise.resolve(null),
+      has: () => Promise.resolve(false),
+      set: () => Promise.resolve(),
+    };
+
+    const cache = (
+      lunacord as unknown as {
+        cacheManager: { cache: (name: string) => { delete: (key: string) => Promise<boolean> } };
+      }
+    ).cacheManager.cache("probe");
+
+    (cache as unknown as { store?: unknown }).store = store;
+
+    await cache.delete("x");
+
+    expect(cacheWarn).toHaveBeenCalled();
   });
 
   it("should restore managed players when a node becomes ready again", async () => {

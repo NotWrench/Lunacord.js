@@ -488,6 +488,20 @@ describe("Node", () => {
 
       expect(wsEvents).toEqual(["2:2000"]);
     });
+
+    it("should emit nodeReconnectFailed ws events when reconnect attempts are exhausted", () => {
+      const wsEvents: string[] = [];
+
+      node.on("ws", (event) => {
+        if (event.type === "nodeReconnectFailed") {
+          wsEvents.push(String(event.attempts));
+        }
+      });
+
+      node.socket.emit("reconnectFailed", { attempts: 5 });
+
+      expect(wsEvents).toEqual(["5"]);
+    });
   });
 
   describe("player action events", () => {

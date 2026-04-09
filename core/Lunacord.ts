@@ -151,6 +151,7 @@ export interface LunacordEvents extends NodeBoundEvents {
   nodeCreate: { node: Node };
   nodeDisconnect: NodeBound<Extract<NodeEvents["ws"], { type: "nodeDisconnect" }>>;
   nodeError: NodeBound<NodeEvents["error"]>;
+  nodeReconnectFailed: NodeBound<Extract<NodeEvents["ws"], { type: "nodeReconnectFailed" }>>;
   nodeReconnecting: NodeBound<Extract<NodeEvents["ws"], { type: "nodeReconnecting" }>>;
   nodeRemove: { node: Node };
   nodeStats: NodeBound<NodeEvents["stats"]>;
@@ -241,7 +242,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     this.options = options;
     this.cacheManager = new CacheManager({
       ...options.cache,
-      logger: options.logger,
+      logger: options.logger ?? options.cache?.logger,
     });
     this.lyricsClient = new LyricsClient(options.lyrics, {
       cache: this.cacheManager.cache("lyrics"),
@@ -465,6 +466,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     } catch (error) {
       await targetNode.destroyPlayer(guildId);
       targetNode.setVoiceStateSnapshot(guildId, undefined);
+      this.playerNodes.set(guildId, sourceNode.id);
       const normalizedError =
         error instanceof Error ? error : new Error(`Failed to migrate player ${guildId}`);
       this.emitObserved("playerMigrationFailed", {
@@ -730,6 +732,13 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
             reason: payload.reason,
           });
           emitObserved("nodeDisconnect", { ...payload, node });
+          break;
+        case "nodeReconnectFailed":
+          this.logWarn("Node reconnect attempts exhausted", {
+            nodeId: node.id,
+            attempts: payload.attempts,
+          });
+          emitObserved("nodeReconnectFailed", { ...payload, node });
           if (this.options.autoMigrateOnDisconnect) {
             void this.migratePlayersFromNode(node, this.resolveAutoMigratePreferredNodeIds());
           }

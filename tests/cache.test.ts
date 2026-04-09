@@ -169,6 +169,23 @@ describe("Cache", () => {
       "RedisCacheStore.clear requires a prefix to avoid deleting unrelated Redis keys"
     );
   });
+
+  it("should treat ttlMs=0 as immediate expiry in Redis store", async () => {
+    const del = mock(() => Promise.resolve(1));
+    const set = mock(() => Promise.resolve("OK"));
+    const store = new RedisCacheStore({
+      del,
+      exists: mock(() => Promise.resolve(0)),
+      get: mock(() => Promise.resolve(null)),
+      scanIterator: mock(() => createScanIterator([])),
+      set,
+    } as unknown as RedisClientType);
+
+    await store.set("prefix:key", { value: 42 }, { ttlMs: 0 });
+
+    expect(del).toHaveBeenCalledWith("prefix:key");
+    expect(set).not.toHaveBeenCalled();
+  });
 });
 
 describe("CacheManager", () => {

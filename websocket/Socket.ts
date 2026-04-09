@@ -14,6 +14,7 @@ interface SocketEvents {
   event: TrackEvent;
   playerUpdate: PlayerUpdate;
   ready: ReadyPayload;
+  reconnectFailed: { attempts: number };
   reconnecting: { attempt: number; delay: number };
   stats: Stats;
 }
@@ -250,6 +251,9 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
     const maxReconnectDelay = this.options.maxReconnectDelayMs ?? MAX_RECONNECT_DELAY;
 
     if (this.reconnectAttempts >= maxReconnectAttempts) {
+      this.emit("reconnectFailed", {
+        attempts: this.reconnectAttempts,
+      });
       this.emit("error", new Error(`Failed to reconnect after ${maxReconnectAttempts} attempts`));
       return;
     }
