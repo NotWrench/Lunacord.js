@@ -15,6 +15,7 @@ export class CacheManager {
     this.store = this.createStore(options);
     this.rootCache = new Cache(this.store, this.prefix, {
       defaultTtlMs: this.defaultTtlMs,
+      logger: options?.logger,
     });
   }
 

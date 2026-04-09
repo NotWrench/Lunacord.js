@@ -1,8 +1,10 @@
 import { describe, expect, it, mock } from "bun:test";
+import type Redis from "ioredis";
 import { Cache } from "../cache/Cache";
 import { CacheManager } from "../cache/CacheManager";
 import { MemoryCacheStore } from "../cache/stores/MemoryCacheStore";
 import { NoopCacheStore } from "../cache/stores/NoopCacheStore";
+import { RedisCacheStore } from "../cache/stores/RedisCacheStore";
 import type { CacheStore } from "../cache/types";
 import { buildTrackCacheKey } from "../cache/utils";
 import { Track } from "../structures/Track";
@@ -122,6 +124,23 @@ describe("Cache", () => {
     await expect(cache.has("key")).resolves.toBe(false);
     await expect(cache.delete("key")).resolves.toBe(false);
     await expect(cache.set("key", "value")).resolves.toBeUndefined();
+    await expect(cache.clear()).resolves.toBeUndefined();
+  });
+
+  it("should support the Redis cache store", async () => {
+    const store = new RedisCacheStore({
+      del: mock(() => Promise.resolve(1)),
+      exists: mock(() => Promise.resolve(1)),
+      get: mock(() => Promise.resolve(JSON.stringify({ value: 42 }))),
+      keys: mock(() => Promise.resolve(["prefix:key"])),
+      set: mock(() => Promise.resolve("OK")),
+    } as unknown as Redis);
+    const cache = new Cache(store, "prefix");
+
+    await expect(cache.get<{ value: number }>("key")).resolves.toEqual({ value: 42 });
+    await expect(cache.has("key")).resolves.toBe(true);
+    await expect(cache.set("key", { value: 42 }, { ttlMs: 1000 })).resolves.toBeUndefined();
+    await expect(cache.delete("key")).resolves.toBe(true);
     await expect(cache.clear()).resolves.toBeUndefined();
   });
 });

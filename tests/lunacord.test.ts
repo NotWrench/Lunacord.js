@@ -134,6 +134,20 @@ describe("Lunacord", () => {
     expect(connectSpy).toHaveBeenCalledTimes(2);
   });
 
+  it("should add a node at runtime", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+
+    const node = await lunacord.addNode({
+      host: "localhost",
+      port: 2555,
+      password: "pass-c",
+      id: "node-c",
+    });
+
+    expect(node.id).toBe("node-c");
+    expect(lunacord.getNode("node-c")).toBe(node);
+  });
+
   it("should fail startup clearly when one managed node fails", async () => {
     const connectSpy = spyOn(Node.prototype, "connect").mockImplementation(function (this: Node) {
       if (this.id === "node-b") {
@@ -320,6 +334,49 @@ describe("Lunacord", () => {
     await lunacord.destroyPlayer("guild-123");
 
     expect(lunacord.getPlayer("guild-123")).toBeUndefined();
+  });
+
+  it("should move a player to another node", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+    nodeA!.rest.destroyPlayer = mock(() => Promise.resolve());
+    nodeB!.rest.updatePlayer = mock(() => Promise.resolve());
+
+    const player = lunacord.createPlayer("guild-move", {
+      preferredNodeIds: ["node-a"],
+      historyMaxSize: 5,
+    });
+    player.current = new Track(MOCK_RAW_TRACK);
+    player.connected = true;
+
+    const moved = await lunacord.movePlayer("guild-move", "node-b");
+
+    expect(nodeB!.getPlayer("guild-move")).toBe(moved);
+    expect(moved.current?.title).toBe("Never Gonna Give You Up");
+    expect(lunacord.getPlayer("guild-move")).toBe(moved);
+  });
+
+  it("should remove a node by migrating its players first", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+    nodeA!.rest.destroyPlayer = mock(() => Promise.resolve());
+    nodeB!.rest.updatePlayer = mock(() => Promise.resolve());
+
+    const player = lunacord.createPlayer("guild-remove-node", {
+      preferredNodeIds: ["node-a"],
+    });
+    player.current = new Track(MOCK_RAW_TRACK);
+
+    await lunacord.removeNode("node-a");
+
+    expect(lunacord.getNode("node-a")).toBeUndefined();
+    expect(nodeB!.getPlayer("guild-remove-node")).toBeDefined();
   });
 
   it("should re-emit node events with node context", () => {
@@ -546,6 +603,23 @@ describe("Lunacord", () => {
       "node-a:filtersUpdate:guild-123",
       "node-a:filtersClear:guild-123",
     ]);
+  });
+
+  it("should re-emit playerQueueEmpty with node context", () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const node = lunacord.getNode("node-a")!;
+    const events: string[] = [];
+
+    lunacord.on("playerQueueEmpty", ({ guildId, reason, node: sourceNode }) => {
+      events.push(`${sourceNode.id}:${guildId}:${reason}`);
+    });
+
+    node.emit("playerQueueEmpty", {
+      guildId: "guild-empty",
+      reason: "trackEnd",
+    });
+
+    expect(events).toEqual(["node-a:guild-empty:trackEnd"]);
   });
 
   it("should re-emit ws with node context", () => {
@@ -858,6 +932,92 @@ describe("Lunacord", () => {
     const result = lunacord.disconnect();
 
     expect(result).toBeUndefined();
+  });
+
+  it("should auto migrate players on node disconnect when enabled", async () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      autoMigrateOnDisconnect: true,
+    });
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+    nodeA!.rest.destroyPlayer = mock(() => Promise.resolve());
+    nodeB!.rest.updatePlayer = mock(() => Promise.resolve());
+
+    const player = lunacord.createPlayer("guild-auto-migrate", {
+      preferredNodeIds: ["node-a"],
+    });
+    player.current = new Track(MOCK_RAW_TRACK);
+
+    nodeA!.emit("ws", {
+      type: "nodeDisconnect",
+      code: 1006,
+      reason: "boom",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(nodeB!.getPlayer("guild-auto-migrate")).toBeDefined();
+  });
+
+  it("should aggregate node stats", () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.latestStats = {
+      op: "stats",
+      players: 2,
+      playingPlayers: 1,
+      uptime: 1,
+      memory: { free: 1, used: 2, allocated: 3, reservable: 4 },
+      cpu: { cores: 4, systemLoad: 0.2, lavalinkLoad: 0.1 },
+      frameStats: { sent: 10, nulled: 1, deficit: 0 },
+    };
+    nodeB!.latestStats = {
+      op: "stats",
+      players: 3,
+      playingPlayers: 2,
+      uptime: 1,
+      memory: { free: 4, used: 5, allocated: 6, reservable: 7 },
+      cpu: { cores: 4, systemLoad: 0.4, lavalinkLoad: 0.2 },
+      frameStats: { sent: 11, nulled: 2, deficit: 1 },
+    };
+
+    const stats = lunacord.getStats();
+
+    expect(stats.players).toBe(5);
+    expect(stats.playingPlayers).toBe(3);
+    expect(stats.memory.used).toBe(7);
+    expect(stats.frameStats.sent).toBe(21);
+  });
+
+  it("should forward internal lifecycle logs to the configured logger", () => {
+    const debug = mock(() => {});
+    const warn = mock(() => {});
+    const error = mock(() => {});
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      logger: { debug, warn, error },
+    });
+    const node = lunacord.getNode("node-a")!;
+
+    node.emit("debug", {
+      category: "ws",
+      message: "Socket ready",
+      context: { resumed: false },
+    });
+    node.emit("ws", {
+      type: "nodeDisconnect",
+      code: 1006,
+      reason: "closed",
+    });
+    node.emit("error", new Error("boom"));
+
+    expect(debug).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    expect(error).toHaveBeenCalled();
   });
 
   it("should restore managed players when a node becomes ready again", async () => {

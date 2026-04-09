@@ -5,6 +5,7 @@ import { Player } from "../core/Player";
 import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Filter } from "../structures/Filter";
 import { Queue } from "../structures/Queue";
+import { QueueHistory } from "../structures/QueueHistory";
 import type { SearchResult } from "../structures/SearchResult";
 import { Track } from "../structures/Track";
 import {
@@ -132,6 +133,7 @@ describe("Player", () => {
   describe("add", () => {
     it("should expose a Queue instance", () => {
       expect(player.queue).toBeInstanceOf(Queue);
+      expect(player.history).toBeInstanceOf(QueueHistory);
     });
 
     it("should add a track to the queue", () => {
@@ -771,6 +773,114 @@ describe("Player", () => {
         "playerQueueInsert",
         "playerQueueDedupe",
       ]);
+    });
+  });
+
+  describe("history", () => {
+    it("should push skipped tracks into history and allow rewinding", async () => {
+      player.current = track;
+      player.add(track2);
+
+      await player.skip();
+
+      expect(player.history.peek()).toBe(track);
+      const previous = player.previous();
+      expect(previous).toBe(track);
+      expect(player.queue.peek()).toBe(track);
+    });
+
+    it("should fetch lyrics for a history track", async () => {
+      player.pushHistory(track);
+
+      const result = await player.getLyricsForHistory(0);
+
+      expect(result).toMatchObject({ status: "found" });
+      expect(mockNode.lyricsClient?.getLyricsForTrack).toHaveBeenCalledWith(track, undefined);
+    });
+  });
+
+  describe("playNext", () => {
+    it("should insert the track at the front of the queue", () => {
+      player.add(track2);
+
+      player.playNext(track);
+
+      expect(player.queue.toArray()).toEqual([track, track2]);
+    });
+  });
+
+  describe("setEndTime", () => {
+    it("should update the player end time through REST", async () => {
+      await player.setEndTime(30_000);
+
+      expect(player.endTime).toBe(30_000);
+      expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
+        endTime: 30_000,
+      });
+    });
+  });
+
+  describe("export/import", () => {
+    it("should export and import player state", async () => {
+      mockNode.getVoiceChannelId = mock(() => "channel-123");
+      player.current = track;
+      player.volume = 75;
+      player.paused = true;
+      player.endTime = 12_000;
+      player.repeatQueue(true);
+      player.add(track2);
+      player.pushHistory(track);
+      await player.setFilters({
+        timescale: {
+          speed: 1.1,
+        },
+      });
+
+      const snapshot = player.export();
+      const importedNode = createMockNode();
+      importedNode.getVoiceChannelId = mock(() => "channel-123");
+      const importedPlayer = new Player("guild-456", importedNode);
+
+      await importedPlayer.import(snapshot);
+
+      expect(importedPlayer.current?.title).toBe(track.title);
+      expect(importedPlayer.queue.peek()?.title).toBe(track2.title);
+      expect(importedPlayer.history.peek()?.title).toBe(track.title);
+      expect(importedPlayer.volume).toBe(75);
+      expect(importedPlayer.endTime).toBe(12_000);
+      expect(importedPlayer.isRepeatQueueEnabled).toBe(true);
+    });
+  });
+
+  describe("synced lyrics", () => {
+    it("should return the current synced lyric line", () => {
+      let now = 1_000;
+      spyOn(Date, "now").mockImplementation(() => now);
+      player.current = track;
+      player.connected = true;
+      player.applyState({
+        connected: true,
+        ping: 0,
+        position: 5_000,
+        time: Date.now(),
+      });
+      now += 2_000;
+
+      const line = player.getCurrentLyricLine({
+        status: "found",
+        lyrics: {
+          title: track.title,
+          artist: track.author,
+          url: "https://example.com",
+          lyricsText: "Line 1\nLine 2",
+          syncedLyrics: [
+            { timeMs: 4_000, text: "Line 1" },
+            { timeMs: 6_000, text: "Line 2" },
+          ],
+        },
+      });
+
+      expect(line).toBe("Line 2");
     });
   });
 

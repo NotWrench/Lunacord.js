@@ -78,6 +78,14 @@ export const LyricsSchema = z.object({
   artist: z.string(),
   url: z.string(),
   lyricsText: z.string(),
+  syncedLyrics: z
+    .array(
+      z.object({
+        timeMs: z.number(),
+        text: z.string(),
+      })
+    )
+    .optional(),
   albumArtUrl: z.string().nullable().optional(),
   releaseDate: z.string().nullable().optional(),
   geniusId: z.number().optional(),

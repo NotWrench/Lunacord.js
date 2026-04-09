@@ -15,7 +15,12 @@ import type {
 } from "../types";
 import { TypedEventEmitter } from "../utils/EventEmitter";
 import { Socket, type WebSocketFactory } from "../websocket/Socket";
-import { Player, type PlayerActionEvent } from "./Player";
+import {
+  Player,
+  type PlayerActionEvent,
+  type PlayerExportData,
+  type PlayerOptions,
+} from "./Player";
 
 export type NodeWsEvent =
   | {
@@ -74,6 +79,7 @@ export interface NodeEvents {
   playerQueueAddMany: PlayerActionPayload<"playerQueueAddMany">;
   playerQueueClear: PlayerActionPayload<"playerQueueClear">;
   playerQueueDedupe: PlayerActionPayload<"playerQueueDedupe">;
+  playerQueueEmpty: PlayerActionPayload<"playerQueueEmpty">;
   playerQueueInsert: PlayerActionPayload<"playerQueueInsert">;
   playerQueueMove: PlayerActionPayload<"playerQueueMove">;
   playerQueueRemove: PlayerActionPayload<"playerQueueRemove">;
@@ -133,6 +139,13 @@ export interface VoiceConnectOptions {
   selfDeaf?: boolean;
   selfMute?: boolean;
   timeoutMs?: number;
+}
+
+export interface VoiceStateSnapshot {
+  channelId: string;
+  endpoint: string;
+  sessionId: string;
+  token: string;
 }
 
 const DEFAULT_CLIENT_NAME = "lavalink-client";
@@ -272,13 +285,13 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     this.socket.disconnect();
   }
 
-  createPlayer(guildId: string): Player {
+  createPlayer(guildId: string, options?: PlayerOptions): Player {
     const existing = this.players.get(guildId);
     if (existing) {
       return existing;
     }
 
-    const player = new Player(guildId, this);
+    const player = new Player(guildId, this, options);
     this.players.set(guildId, player);
     this.emit("playerCreate", { guildId, player });
     return player;
@@ -500,6 +513,12 @@ export class Node extends TypedEventEmitter<NodeEvents> {
           by: event.by,
         });
         return;
+      case "playerQueueEmpty":
+        this.emit("playerQueueEmpty", {
+          guildId: event.guildId,
+          reason: event.reason,
+        });
+        return;
       case "playerQueueInsert":
         this.emit("playerQueueInsert", {
           guildId: event.guildId,
@@ -714,6 +733,10 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       case "TrackEndEvent": {
         const track = Track.fromValidated(event.track);
         player.current = null;
+        player.endTime = null;
+        if (event.reason !== "cleanup" && event.reason !== "stopped") {
+          player.pushHistory(track);
+        }
         this.emit("trackEnd", { player, track, reason: event.reason });
         void this.handleQueueAdvance(player, event.reason, track);
         break;
@@ -758,6 +781,45 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       sessionId: state.sessionId,
       token: server.token,
     };
+  }
+
+  getVoiceChannelId(guildId: string): string | undefined {
+    return this.voiceStates.get(guildId)?.channelId;
+  }
+
+  getVoiceStateSnapshot(guildId: string): VoiceStateSnapshot | undefined {
+    const state = this.voiceStates.get(guildId);
+    const server = this.voiceServers.get(guildId);
+
+    if (!state || !server) {
+      return undefined;
+    }
+
+    return {
+      channelId: state.channelId,
+      endpoint: server.endpoint,
+      sessionId: state.sessionId,
+      token: server.token,
+    };
+  }
+
+  setVoiceStateSnapshot(guildId: string, snapshot: VoiceStateSnapshot | undefined): void {
+    if (!snapshot) {
+      this.voiceStates.delete(guildId);
+      this.voiceServers.delete(guildId);
+      this.syncedVoiceStateKeys.delete(guildId);
+      return;
+    }
+
+    this.voiceStates.set(guildId, {
+      channelId: snapshot.channelId,
+      sessionId: snapshot.sessionId,
+    });
+    this.voiceServers.set(guildId, {
+      endpoint: snapshot.endpoint,
+      token: snapshot.token,
+    });
+    this.syncedVoiceStateKeys.delete(guildId);
   }
 
   private handleVoiceServerPacket(packetData: Record<string, unknown>): void {
@@ -957,12 +1019,19 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
       if (!player.queue.isEmpty) {
         await player.play();
+      } else {
+        player.notifyQueueEmpty("trackEnd");
       }
 
       return;
     }
 
-    if (!this.shouldAutoAdvance(reason) || player.queue.isEmpty) {
+    if (!this.shouldAutoAdvance(reason)) {
+      return;
+    }
+
+    if (player.queue.isEmpty) {
+      player.notifyQueueEmpty("trackEnd");
       return;
     }
 
@@ -1018,6 +1087,10 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       }
     }
 
+    if (snapshot.endTime !== null) {
+      payload.endTime = snapshot.endTime;
+    }
+
     if (snapshot.volume !== 100) {
       payload.volume = snapshot.volume;
     }
@@ -1039,5 +1112,15 @@ export class Node extends TypedEventEmitter<NodeEvents> {
     }
 
     await this.rest.updatePlayer(this.sessionId, player.guildId, payload);
+  }
+
+  async importPlayer(
+    guildId: string,
+    snapshot: PlayerExportData,
+    options?: PlayerOptions
+  ): Promise<Player> {
+    const player = this.createPlayer(guildId, options);
+    await player.import(snapshot);
+    return player;
   }
 }

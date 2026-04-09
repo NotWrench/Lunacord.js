@@ -22,8 +22,9 @@ import {
   type NodeEvents,
   type NodeOptions,
   type VoiceConnectOptions,
+  type VoiceStateSnapshot,
 } from "./Node";
-import type { Player } from "./Player";
+import type { Player, PlayerExportData, PlayerOptions } from "./Player";
 
 export class LunacordError extends Error {
   override readonly cause?: unknown;
@@ -83,14 +84,54 @@ export type LunacordNodeSelectionStrategy =
     };
 
 export interface CreatePlayerOptions {
+  historyMaxSize?: number;
+  onQueueEmpty?: (player: Player, reason: "manual" | "trackEnd") => Promise<void> | void;
   preferredNodeIds?: readonly string[];
   region?: string;
 }
 
+export interface LunacordLogger {
+  debug?: (message: string, data?: unknown) => void;
+  error?: (message: string, data?: unknown) => void;
+  warn?: (message: string, data?: unknown) => void;
+}
+
+export interface AutoMigrateOptions {
+  preferredNodeIds?: readonly string[];
+}
+
+export interface AggregatedNodeStats {
+  connected: boolean;
+  id: string;
+  playerCount: number;
+  stats: Node["latestStats"];
+}
+
+export interface AggregatedLunacordStats {
+  connectedNodes: number;
+  frameStats: {
+    deficit: number;
+    nulled: number;
+    sent: number;
+  };
+  memory: {
+    allocated: number;
+    free: number;
+    reservable: number;
+    used: number;
+  };
+  nodes: AggregatedNodeStats[];
+  players: number;
+  playingPlayers: number;
+  totalNodes: number;
+}
+
 export interface LunacordOptions {
   autoConnect?: boolean;
+  autoMigrateOnDisconnect?: boolean | AutoMigrateOptions;
   cache?: CacheOptions;
   clientName?: string;
+  logger?: LunacordLogger;
   lyrics?: LyricsOptions;
   nodeSelection?: LunacordNodeSelectionStrategy;
   nodes: readonly LunacordNodeOptions[];
@@ -111,6 +152,7 @@ export interface LunacordEvents extends NodeBoundEvents {
   nodeDisconnect: NodeBound<Extract<NodeEvents["ws"], { type: "nodeDisconnect" }>>;
   nodeError: NodeBound<NodeEvents["error"]>;
   nodeReconnecting: NodeBound<Extract<NodeEvents["ws"], { type: "nodeReconnecting" }>>;
+  nodeRemove: { node: Node };
   nodeStats: NodeBound<NodeEvents["stats"]>;
   nodeVoiceSocketClosed: NodeBound<NodeEvents["voiceSocketClosed"]>;
   playerConnect: NodeBound<NodeEvents["playerConnect"]>;
@@ -119,12 +161,15 @@ export interface LunacordEvents extends NodeBoundEvents {
   playerDisconnect: NodeBound<NodeEvents["playerDisconnect"]>;
   playerFiltersClear: NodeBound<NodeEvents["playerFiltersClear"]>;
   playerFiltersUpdate: NodeBound<NodeEvents["playerFiltersUpdate"]>;
+  playerMigrate: { fromNode: Node; guildId: string; player: Player; toNode: Node };
+  playerMigrationFailed: { error: Error; fromNode: Node; guildId: string; targetNode?: Node };
   playerPause: NodeBound<NodeEvents["playerPause"]>;
   playerPlay: NodeBound<NodeEvents["playerPlay"]>;
   playerQueueAdd: NodeBound<NodeEvents["playerQueueAdd"]>;
   playerQueueAddMany: NodeBound<NodeEvents["playerQueueAddMany"]>;
   playerQueueClear: NodeBound<NodeEvents["playerQueueClear"]>;
   playerQueueDedupe: NodeBound<NodeEvents["playerQueueDedupe"]>;
+  playerQueueEmpty: NodeBound<NodeEvents["playerQueueEmpty"]>;
   playerQueueInsert: NodeBound<NodeEvents["playerQueueInsert"]>;
   playerQueueMove: NodeBound<NodeEvents["playerQueueMove"]>;
   playerQueueRemove: NodeBound<NodeEvents["playerQueueRemove"]>;
@@ -185,6 +230,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   private readonly options: LunacordOptions;
   private readonly plugins: LunacordPlugin[] = [];
   private readonly playerNodes = new Map<string, string>();
+  private readonly drainingNodes = new Set<string>();
   private connectPromise: Promise<void> | null = null;
   private notifyingPluginError = false;
   private roundRobinIndex = 0;
@@ -192,22 +238,16 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   constructor(options: LunacordOptions) {
     super();
     this.options = options;
-    this.cacheManager = new CacheManager(options.cache);
+    this.cacheManager = new CacheManager({
+      ...options.cache,
+      logger: options.logger,
+    });
     this.lyricsClient = new LyricsClient(options.lyrics, {
       cache: this.cacheManager.cache("lyrics"),
     });
 
     for (const [index, nodeOptions] of options.nodes.entries()) {
-      const id = nodeOptions.id ?? `node-${index + 1}`;
-      const node = new Node(this.createNodeOptions(id, nodeOptions));
-
-      this.nodes.set(node.id, node);
-      this.bindNodeEvents(node);
-      this.refreshNodeSearchTransformers();
-
-      queueMicrotask(() => {
-        this.emitObserved("nodeCreate", { node });
-      });
+      this.registerNode(this.instantiateNode(nodeOptions, index));
     }
 
     if (options.autoConnect) {
@@ -297,9 +337,50 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       throw new Error("No connected Lavalink nodes are available");
     }
 
-    const player = node.createPlayer(guildId);
+    const player = node.createPlayer(guildId, this.toPlayerOptions(options));
     this.playerNodes.set(guildId, node.id);
     return player;
+  }
+
+  async addNode(options: LunacordNodeOptions): Promise<Node> {
+    const node = this.instantiateNode(options, this.nodes.size);
+    this.logDebug("Adding node", {
+      nodeId: node.id,
+    });
+    this.registerNode(node);
+
+    if (this.connectPromise || this.getConnectedNodes().length > 0) {
+      await node.connect();
+    }
+
+    return node;
+  }
+
+  async removeNode(nodeId: string): Promise<void> {
+    const node = this.nodes.get(nodeId);
+    if (!node) {
+      throw new Error(`Node ${nodeId} does not exist`);
+    }
+
+    this.drainingNodes.add(nodeId);
+    this.logWarn("Removing node", {
+      nodeId,
+      playerCount: node.playerCount,
+    });
+
+    try {
+      for (const player of node.getPlayers()) {
+        await this.movePlayer(player.guildId, this.selectMigrationTargetNodeId(nodeId));
+      }
+    } catch (error) {
+      this.drainingNodes.delete(nodeId);
+      throw error;
+    }
+
+    node.disconnect();
+    this.nodes.delete(nodeId);
+    this.drainingNodes.delete(nodeId);
+    this.emitObserved("nodeRemove", { node });
   }
 
   getLeastLoadedNode(): Node | undefined {
@@ -336,6 +417,111 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
 
   isPlayerConnected(guildId: string): boolean {
     return this.getPlayer(guildId)?.isConnected ?? false;
+  }
+
+  async movePlayer(guildId: string, targetNodeId: string): Promise<Player> {
+    const sourceNode = this.getNodeForGuild(guildId);
+    if (!sourceNode) {
+      throw new Error(`No player exists for guild ${guildId}`);
+    }
+
+    const targetNode = this.nodes.get(targetNodeId);
+    if (!targetNode) {
+      throw new Error(`Node ${targetNodeId} does not exist`);
+    }
+
+    if (sourceNode.id === targetNode.id) {
+      return sourceNode.getPlayer(guildId)!;
+    }
+
+    const sourcePlayer = sourceNode.getPlayer(guildId);
+    if (!sourcePlayer) {
+      throw new Error(`No player exists for guild ${guildId}`);
+    }
+
+    const snapshot = sourcePlayer.export();
+    const voiceSnapshot = sourceNode.getVoiceStateSnapshot(guildId);
+    this.logDebug("Migrating player", {
+      guildId,
+      fromNodeId: sourceNode.id,
+      toNodeId: targetNode.id,
+    });
+    targetNode.setVoiceStateSnapshot(guildId, voiceSnapshot);
+
+    const targetPlayer = targetNode.createPlayer(guildId, sourcePlayer.getCreationOptions());
+
+    try {
+      await targetPlayer.import(snapshot);
+      this.playerNodes.set(guildId, targetNode.id);
+      await sourceNode.destroyPlayer(guildId);
+      this.emitObserved("playerMigrate", {
+        guildId,
+        fromNode: sourceNode,
+        toNode: targetNode,
+        player: targetPlayer,
+      });
+      return targetPlayer;
+    } catch (error) {
+      await targetNode.destroyPlayer(guildId);
+      targetNode.setVoiceStateSnapshot(guildId, undefined);
+      const normalizedError =
+        error instanceof Error ? error : new Error(`Failed to migrate player ${guildId}`);
+      this.emitObserved("playerMigrationFailed", {
+        guildId,
+        fromNode: sourceNode,
+        targetNode,
+        error: normalizedError,
+      });
+      throw normalizedError;
+    }
+  }
+
+  getStats(): AggregatedLunacordStats {
+    const nodes = this.getNodes().map((node) => ({
+      id: node.id,
+      connected: node.connected,
+      playerCount: node.playerCount,
+      stats: node.latestStats,
+    }));
+
+    return nodes.reduce<AggregatedLunacordStats>(
+      (aggregate, node) => {
+        aggregate.totalNodes += 1;
+        if (node.connected) {
+          aggregate.connectedNodes += 1;
+        }
+
+        aggregate.players += node.stats?.players ?? node.playerCount;
+        aggregate.playingPlayers += node.stats?.playingPlayers ?? 0;
+        aggregate.memory.free += node.stats?.memory.free ?? 0;
+        aggregate.memory.used += node.stats?.memory.used ?? 0;
+        aggregate.memory.allocated += node.stats?.memory.allocated ?? 0;
+        aggregate.memory.reservable += node.stats?.memory.reservable ?? 0;
+        aggregate.frameStats.sent += node.stats?.frameStats?.sent ?? 0;
+        aggregate.frameStats.nulled += node.stats?.frameStats?.nulled ?? 0;
+        aggregate.frameStats.deficit += node.stats?.frameStats?.deficit ?? 0;
+        aggregate.nodes.push(node);
+        return aggregate;
+      },
+      {
+        connectedNodes: 0,
+        frameStats: {
+          deficit: 0,
+          nulled: 0,
+          sent: 0,
+        },
+        memory: {
+          allocated: 0,
+          free: 0,
+          reservable: 0,
+          used: 0,
+        },
+        nodes: [],
+        players: 0,
+        playingPlayers: 0,
+        totalNodes: 0,
+      }
+    );
   }
 
   handleVoicePacket(packet: unknown): void {
@@ -412,13 +598,20 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     node.on("playerDestroy", (payload) => {
       const { guildId } = payload;
       this.lyricsClient.markTrackInactive(guildId);
-      this.playerNodes.delete(guildId);
+      if (this.playerNodes.get(guildId) === node.id) {
+        this.playerNodes.delete(guildId);
+      }
       emitObserved("playerDestroy", { ...payload, node });
     });
     node.on("playerPause", (payload) => {
       emitObserved("playerPause", { ...payload, node });
     });
     node.on("debug", (payload) => {
+      this.logDebug(payload.message, {
+        nodeId: node.id,
+        category: payload.category,
+        ...(payload.context ?? {}),
+      });
       emitObserved("debug", { ...payload, node });
     });
     node.on("playerFiltersClear", (payload) => {
@@ -442,6 +635,9 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     });
     node.on("playerQueueDedupe", (payload) => {
       emitObserved("playerQueueDedupe", { ...payload, node });
+    });
+    node.on("playerQueueEmpty", (payload) => {
+      emitObserved("playerQueueEmpty", { ...payload, node });
     });
     node.on("playerQueueInsert", (payload) => {
       emitObserved("playerQueueInsert", { ...payload, node });
@@ -475,6 +671,10 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       emitObserved("playerStop", { ...payload, node });
     });
     node.on("ready", (payload) => {
+      this.logDebug("Node ready", {
+        nodeId: node.id,
+        resumed: payload.resumed,
+      });
       emitObserved("ready", { ...payload, node });
       emitObserved("nodeConnect", { ...payload, node });
       if (!payload.resumed) {
@@ -483,6 +683,10 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     });
     node.on("error", (error) => {
       const enriched = new LunacordError(error, node);
+      this.logError("Node error", {
+        nodeId: node.id,
+        message: error.message,
+      });
       emitObserved("error", enriched);
       emitObserved("nodeError", enriched);
     });
@@ -519,7 +723,15 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
 
       switch (payload.type) {
         case "nodeDisconnect":
+          this.logWarn("Node disconnected", {
+            nodeId: node.id,
+            code: payload.code,
+            reason: payload.reason,
+          });
           emitObserved("nodeDisconnect", { ...payload, node });
+          if (this.options.autoMigrateOnDisconnect) {
+            void this.migratePlayersFromNode(node, this.resolveAutoMigratePreferredNodeIds());
+          }
           break;
         case "nodeReconnecting":
           emitObserved("nodeReconnecting", { ...payload, node });
@@ -540,6 +752,26 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
         })
       )
     ).then(() => undefined);
+  }
+
+  private instantiateNode(nodeOptions: LunacordNodeOptions, index: number): Node {
+    const id = nodeOptions.id ?? `node-${index + 1}`;
+    return new Node(this.createNodeOptions(id, nodeOptions));
+  }
+
+  private registerNode(node: Node): void {
+    if (this.nodes.has(node.id)) {
+      throw new Error(`Node ${node.id} is already registered`);
+    }
+
+    this.nodes.set(node.id, node);
+    this.bindNodeEvents(node);
+    this.attachNodeRestLogging(node);
+    this.refreshNodeSearchTransformers();
+
+    queueMicrotask(() => {
+      this.emitObserved("nodeCreate", { node });
+    });
   }
 
   private createNodeOptions(id: string, nodeOptions: LunacordNodeOptions): NodeOptions {
@@ -663,7 +895,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   }
 
   private getConnectedNodes(): Node[] {
-    return this.getNodes().filter((node) => node.connected);
+    return this.getNodes().filter((node) => node.connected && !this.drainingNodes.has(node.id));
   }
 
   private selectNode(guildId: string, options?: CreatePlayerOptions): Node | undefined {
@@ -822,5 +1054,110 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
         );
       }
     }
+  }
+
+  private toPlayerOptions(options?: CreatePlayerOptions): PlayerOptions | undefined {
+    if (!options) {
+      return undefined;
+    }
+
+    return {
+      historyMaxSize: options.historyMaxSize,
+      onQueueEmpty: options.onQueueEmpty,
+    };
+  }
+
+  private selectMigrationTargetNodeId(
+    sourceNodeId: string,
+    preferredNodeIds?: readonly string[]
+  ): string {
+    const candidates = this.getConnectedNodes().filter((node) => node.id !== sourceNodeId);
+    const preferredCandidates = preferredNodeIds
+      ? candidates.filter((node) => preferredNodeIds.includes(node.id))
+      : candidates;
+    const nextNode = this.selectLeastLoadedNode(
+      preferredCandidates.length > 0 ? preferredCandidates : candidates
+    );
+
+    if (!nextNode) {
+      throw new Error(`No migration target is available for node ${sourceNodeId}`);
+    }
+
+    return nextNode.id;
+  }
+
+  private resolveAutoMigratePreferredNodeIds(): readonly string[] | undefined {
+    const autoMigrateOptions = this.options.autoMigrateOnDisconnect;
+    if (!autoMigrateOptions || autoMigrateOptions === true) {
+      return undefined;
+    }
+
+    return autoMigrateOptions.preferredNodeIds;
+  }
+
+  private async migratePlayersFromNode(
+    node: Node,
+    preferredNodeIds?: readonly string[]
+  ): Promise<void> {
+    for (const player of node.getPlayers()) {
+      try {
+        await this.movePlayer(
+          player.guildId,
+          this.selectMigrationTargetNodeId(node.id, preferredNodeIds)
+        );
+      } catch (error) {
+        const normalizedError =
+          error instanceof Error
+            ? error
+            : new Error(`Failed to migrate player ${player.guildId} from ${node.id}`);
+        this.emitObserved("playerMigrationFailed", {
+          guildId: player.guildId,
+          fromNode: node,
+          error: normalizedError,
+        });
+      }
+    }
+  }
+
+  private attachNodeRestLogging(node: Node): void {
+    if (!this.options.logger) {
+      return;
+    }
+
+    node.rest.use({
+      beforeRequest: (context) => {
+        this.logDebug("REST request", {
+          nodeId: node.id,
+          method: context.method,
+          path: context.path,
+        });
+      },
+      afterResponse: (context) => {
+        this.logDebug("REST response", {
+          nodeId: node.id,
+          path: context.request.path,
+          status: context.response.status,
+        });
+      },
+      onError: (context) => {
+        this.logError("REST error", {
+          nodeId: node.id,
+          path: context.request.path,
+          error: context.error instanceof Error ? context.error.message : String(context.error),
+        });
+      },
+    });
+  }
+
+  private logDebug(message: string, data?: unknown): void {
+    this.options.logger?.debug?.(message, data);
+  }
+
+  private logWarn(message: string, data?: unknown): void {
+    this.options.logger?.warn?.(message, data);
+  }
+
+  private logError(message: string, data?: unknown): void {
+    this.options.logger?.error?.(message, data);
   }
 }
