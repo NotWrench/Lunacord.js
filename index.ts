@@ -1,5 +1,3 @@
-// index.ts
-
 export { Cache } from "./cache/Cache";
 export { CacheManager } from "./cache/CacheManager";
 export { MemoryCacheStore } from "./cache/stores/MemoryCacheStore";

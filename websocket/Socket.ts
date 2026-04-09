@@ -1,4 +1,3 @@
-// websocket/Socket.ts
 import {
   type PlayerUpdate,
   type ReadyPayload,

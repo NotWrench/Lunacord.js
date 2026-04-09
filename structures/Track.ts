@@ -1,4 +1,3 @@
-// structures/Track.ts
 import { type RawTrack, TrackSchema } from "../types";
 
 const SECONDS_PER_MINUTE = 60;
