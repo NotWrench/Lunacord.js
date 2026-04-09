@@ -22,9 +22,8 @@ import {
   type NodeEvents,
   type NodeOptions,
   type VoiceConnectOptions,
-  type VoiceStateSnapshot,
 } from "./Node";
-import type { Player, PlayerExportData, PlayerOptions } from "./Player";
+import type { Player, PlayerOptions } from "./Player";
 
 export class LunacordError extends Error {
   override readonly cause?: unknown;
