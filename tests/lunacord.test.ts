@@ -410,6 +410,29 @@ describe("Lunacord", () => {
     expect(nodeB!.getPlayer("guild-move-fail")).toBeUndefined();
   });
 
+  it("should rethrow original import error when target cleanup fails", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA, nodeB] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeA!.rest.destroyPlayer = mock(() => Promise.resolve());
+    nodeB!.sessionId = "session-b";
+    nodeB!.rest.destroyPlayer = mock(() => Promise.reject(new Error("cleanup failed")));
+    nodeB!.rest.updatePlayer = mock(() => Promise.reject(new Error("import failed")));
+
+    const sourcePlayer = lunacord.createPlayer("guild-move-cleanup-fail", {
+      preferredNodeIds: ["node-a"],
+    });
+    sourcePlayer.current = new Track(MOCK_RAW_TRACK);
+
+    await expect(lunacord.movePlayer("guild-move-cleanup-fail", "node-b")).rejects.toThrow(
+      "import failed"
+    );
+
+    expect(lunacord.getPlayer("guild-move-cleanup-fail")).toBe(sourcePlayer);
+    expect(nodeA!.getPlayer("guild-move-cleanup-fail")).toBe(sourcePlayer);
+  });
+
   it("should remove a node by migrating its players first", async () => {
     const lunacord = new Lunacord(BASE_OPTIONS);
     const [nodeA, nodeB] = lunacord.getNodes();

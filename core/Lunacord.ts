@@ -464,11 +464,21 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       });
       return targetPlayer;
     } catch (error) {
-      await targetNode.destroyPlayer(guildId);
-      targetNode.setVoiceStateSnapshot(guildId, undefined);
-      this.playerNodes.set(guildId, sourceNode.id);
       const normalizedError =
         error instanceof Error ? error : new Error(`Failed to migrate player ${guildId}`);
+
+      try {
+        await targetNode.destroyPlayer(guildId);
+      } catch (cleanupError) {
+        this.logWarn("Failed to cleanup target player after migration failure", {
+          guildId,
+          targetNodeId: targetNode.id,
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        });
+      }
+
+      targetNode.setVoiceStateSnapshot(guildId, undefined);
+      this.playerNodes.set(guildId, sourceNode.id);
       this.emitObserved("playerMigrationFailed", {
         guildId,
         fromNode: sourceNode,
