@@ -962,6 +962,92 @@ describe("Lunacord", () => {
     expect(nodeB!.getPlayer("guild-auto-migrate")).toBeDefined();
   });
 
+  it("should emit playerMigrationFailed only once when movePlayer fails during auto migration", async () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      autoMigrateOnDisconnect: true,
+    });
+    const [nodeA, nodeB] = lunacord.getNodes();
+    const migrationFailures: string[] = [];
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = "session-b";
+
+    const movePlayerMock = mock(async (guildId: string, _targetNodeId: string) => {
+      const error = new Error("import failed");
+      lunacord.emit("playerMigrationFailed", {
+        guildId,
+        fromNode: nodeA!,
+        targetNode: nodeB!,
+        error,
+      });
+      throw error;
+    });
+    lunacord.movePlayer = movePlayerMock as unknown as typeof lunacord.movePlayer;
+
+    lunacord.on("playerMigrationFailed", ({ guildId, fromNode, targetNode, error }) => {
+      migrationFailures.push(
+        `${guildId}:${fromNode.id}:${targetNode?.id ?? "none"}:${error.message}`
+      );
+    });
+
+    const player = lunacord.createPlayer("guild-migrate-fail", {
+      preferredNodeIds: ["node-a"],
+    });
+    player.current = new Track(MOCK_RAW_TRACK);
+
+    nodeA!.emit("ws", {
+      type: "nodeDisconnect",
+      code: 1006,
+      reason: "boom",
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(movePlayerMock).toHaveBeenCalledTimes(1);
+    expect(migrationFailures).toHaveLength(1);
+    expect(migrationFailures[0]).toContain("guild-migrate-fail:node-a:node-b:import failed");
+  });
+
+  it("should emit playerMigrationFailed when no migration target exists", async () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      autoMigrateOnDisconnect: true,
+    });
+    const [nodeA, nodeB] = lunacord.getNodes();
+    const migrationFailures: string[] = [];
+
+    nodeA!.sessionId = "session-a";
+    nodeB!.sessionId = null;
+
+    lunacord.on("playerMigrationFailed", ({ guildId, fromNode, targetNode, error }) => {
+      migrationFailures.push(
+        `${guildId}:${fromNode.id}:${targetNode?.id ?? "none"}:${error.message}`
+      );
+    });
+
+    const player = lunacord.createPlayer("guild-no-target", {
+      preferredNodeIds: ["node-a"],
+    });
+    player.current = new Track(MOCK_RAW_TRACK);
+
+    nodeA!.emit("ws", {
+      type: "nodeDisconnect",
+      code: 1006,
+      reason: "boom",
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(migrationFailures).toHaveLength(1);
+    expect(migrationFailures[0]).toContain(
+      "guild-no-target:node-a:none:No migration target is available for node node-a"
+    );
+  });
+
   it("should aggregate node stats", () => {
     const lunacord = new Lunacord(BASE_OPTIONS);
     const [nodeA, nodeB] = lunacord.getNodes();

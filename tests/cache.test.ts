@@ -143,6 +143,20 @@ describe("Cache", () => {
     await expect(cache.delete("key")).resolves.toBe(true);
     await expect(cache.clear()).resolves.toBeUndefined();
   });
+
+  it("should throw when Redis clear is called without a prefix", async () => {
+    const store = new RedisCacheStore({
+      del: mock(() => Promise.resolve(1)),
+      exists: mock(() => Promise.resolve(1)),
+      get: mock(() => Promise.resolve(null)),
+      keys: mock(() => Promise.resolve([])),
+      set: mock(() => Promise.resolve("OK")),
+    } as unknown as Redis);
+
+    await expect(store.clear()).rejects.toThrow(
+      "RedisCacheStore.clear requires a prefix to avoid deleting unrelated Redis keys"
+    );
+  });
 });
 
 describe("CacheManager", () => {

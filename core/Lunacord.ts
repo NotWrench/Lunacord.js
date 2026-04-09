@@ -1100,11 +1100,10 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     preferredNodeIds?: readonly string[]
   ): Promise<void> {
     for (const player of node.getPlayers()) {
+      let targetNodeId: string;
+
       try {
-        await this.movePlayer(
-          player.guildId,
-          this.selectMigrationTargetNodeId(node.id, preferredNodeIds)
-        );
+        targetNodeId = this.selectMigrationTargetNodeId(node.id, preferredNodeIds);
       } catch (error) {
         const normalizedError =
           error instanceof Error
@@ -1115,6 +1114,13 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
           fromNode: node,
           error: normalizedError,
         });
+        continue;
+      }
+
+      try {
+        await this.movePlayer(player.guildId, targetNodeId);
+      } catch {
+        // movePlayer already emits playerMigrationFailed for migration execution errors.
       }
     }
   }

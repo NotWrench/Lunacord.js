@@ -10,10 +10,12 @@ export class RedisCacheStore {
 
   async clear(prefix?: string): Promise<void> {
     if (!prefix) {
-      return;
+      throw new Error(
+        "RedisCacheStore.clear requires a prefix to avoid deleting unrelated Redis keys"
+      );
     }
 
-    const keys = await this.client.keys(`${prefix}*`);
+    const keys = await this.client.keys(`${prefix}:*`);
     if (keys.length === 0) {
       return;
     }
