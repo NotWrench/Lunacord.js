@@ -1,10 +1,10 @@
-import type Redis from "ioredis";
+import type { RedisClientType } from "redis";
 import type { CacheSetOptions } from "../types";
 
 export class RedisCacheStore {
-  private readonly client: Redis;
+  private readonly client: RedisClientType;
 
-  constructor(client: Redis) {
+  constructor(client: RedisClientType) {
     this.client = client;
   }
 
@@ -15,12 +15,15 @@ export class RedisCacheStore {
       );
     }
 
-    const keys = await this.client.keys(`${prefix}:*`);
-    if (keys.length === 0) {
-      return;
+    const pattern = `${prefix}:*`;
+    for await (const keys of this.client.scanIterator({
+      MATCH: pattern,
+      COUNT: 1000,
+    })) {
+      if (keys.length > 0) {
+        await this.client.del(keys);
+      }
     }
-
-    await this.client.del(...keys);
   }
 
   async delete(key: string): Promise<boolean> {
@@ -42,7 +45,9 @@ export class RedisCacheStore {
 
   async set<T>(key: string, value: T, options?: CacheSetOptions): Promise<void> {
     if (options?.ttlMs) {
-      await this.client.set(key, JSON.stringify(value), "PX", options.ttlMs);
+      await this.client.set(key, JSON.stringify(value), {
+        PX: options.ttlMs,
+      });
       return;
     }
 

@@ -180,7 +180,9 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
         headers,
       } as unknown as string[]);
     } catch {
-      return new RuntimeWebSocket(url);
+      throw new Error(
+        "This WebSocket runtime does not support custom headers. Provide webSocketFactory in Node/Lunacord options."
+      );
     }
   }
 

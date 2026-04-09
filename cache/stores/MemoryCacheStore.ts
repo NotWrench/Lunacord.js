@@ -121,7 +121,7 @@ export class MemoryCacheStore {
 
     while (this.entries.size > this.maxEntries) {
       const oldestKey = this.entries.keys().next().value;
-      if (!oldestKey) {
+      if (oldestKey === undefined) {
         return;
       }
 

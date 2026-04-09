@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import type Redis from "ioredis";
+import type { RedisClientType } from "redis";
 import { Cache } from "../cache/Cache";
 import { CacheManager } from "../cache/CacheManager";
 import { MemoryCacheStore } from "../cache/stores/MemoryCacheStore";
@@ -9,6 +9,13 @@ import type { CacheStore } from "../cache/types";
 import { buildTrackCacheKey } from "../cache/utils";
 import { Track } from "../structures/Track";
 import type { RawTrack } from "../types";
+
+const createScanIterator = (batches: string[][]): RedisClientType["scanIterator"] =>
+  async function* () {
+    for (const batch of batches) {
+      yield batch;
+    }
+  } as RedisClientType["scanIterator"];
 
 describe("Cache", () => {
   it("should set, get, has, and delete values in memory store", async () => {
@@ -128,13 +135,14 @@ describe("Cache", () => {
   });
 
   it("should support the Redis cache store", async () => {
+    const scanIterator = mock(() => createScanIterator([["prefix:key"]]));
     const store = new RedisCacheStore({
       del: mock(() => Promise.resolve(1)),
       exists: mock(() => Promise.resolve(1)),
       get: mock(() => Promise.resolve(JSON.stringify({ value: 42 }))),
-      keys: mock(() => Promise.resolve(["prefix:key"])),
+      scanIterator,
       set: mock(() => Promise.resolve("OK")),
-    } as unknown as Redis);
+    } as unknown as RedisClientType);
     const cache = new Cache(store, "prefix");
 
     await expect(cache.get<{ value: number }>("key")).resolves.toEqual({ value: 42 });
@@ -142,6 +150,10 @@ describe("Cache", () => {
     await expect(cache.set("key", { value: 42 }, { ttlMs: 1000 })).resolves.toBeUndefined();
     await expect(cache.delete("key")).resolves.toBe(true);
     await expect(cache.clear()).resolves.toBeUndefined();
+    expect(scanIterator).toHaveBeenCalledWith({
+      COUNT: 1000,
+      MATCH: "prefix:*",
+    });
   });
 
   it("should throw when Redis clear is called without a prefix", async () => {
@@ -149,9 +161,9 @@ describe("Cache", () => {
       del: mock(() => Promise.resolve(1)),
       exists: mock(() => Promise.resolve(1)),
       get: mock(() => Promise.resolve(null)),
-      keys: mock(() => Promise.resolve([])),
+      scanIterator: mock(() => createScanIterator([])),
       set: mock(() => Promise.resolve("OK")),
-    } as unknown as Redis);
+    } as unknown as RedisClientType);
 
     await expect(store.clear()).rejects.toThrow(
       "RedisCacheStore.clear requires a prefix to avoid deleting unrelated Redis keys"

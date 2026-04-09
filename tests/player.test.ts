@@ -850,6 +850,30 @@ describe("Player", () => {
       expect(importedPlayer.endTime).toBe(12_000);
       expect(importedPlayer.isRepeatQueueEnabled).toBe(true);
     });
+
+    it("should import filters locally without emitting filter update events", async () => {
+      await player.setFilters({
+        timescale: {
+          speed: 1.1,
+        },
+      });
+      const snapshot = player.export();
+
+      const importedNode = createMockNode();
+      const emitPlayerEvent = mock(() => {});
+      importedNode.emitPlayerEvent = emitPlayerEvent;
+      const importedPlayer = new Player("guild-456", importedNode);
+
+      await importedPlayer.import(snapshot);
+
+      const eventTypes = getMockEvents(emitPlayerEvent)
+        .filter(isEventWithType)
+        .map((event) => event.type);
+
+      expect(eventTypes).not.toContain("playerFiltersUpdate");
+      expect(importedNode.rest.updatePlayer).not.toHaveBeenCalled();
+      expect(importedPlayer.filters.timescale?.speed).toBe(1.1);
+    });
   });
 
   describe("synced lyrics", () => {
@@ -983,6 +1007,30 @@ describe("Player", () => {
       nowSpy.mockReturnValue(1_002_000);
 
       expect(player.getEstimatedPosition()).toBe(6_000);
+      nowSpy.mockRestore();
+    });
+
+    it("should apply combined timescale speed and rate when estimating position", async () => {
+      player.current = track;
+      player.connected = true;
+      player.paused = false;
+      await player.setFilters({
+        timescale: {
+          speed: 2,
+          rate: 1.5,
+        },
+      });
+      const nowSpy = spyOn(Date, "now");
+      nowSpy.mockReturnValue(1_000_000);
+      player.applyState({
+        time: 1_000_000,
+        position: 5_000,
+        connected: true,
+        ping: 42,
+      });
+      nowSpy.mockReturnValue(1_002_000);
+
+      expect(player.getEstimatedPosition()).toBe(11_000);
       nowSpy.mockRestore();
     });
   });

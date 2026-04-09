@@ -39,15 +39,10 @@
     "ultracite": "7.3.2"
   },
   "peerDependencies": {
-    "ioredis": "latest",
     "typescript": "^5"
   },
-  "peerDependenciesMeta": {
-    "ioredis": {
-      "optional": true
-    }
-  },
   "dependencies": {
+    "redis": "^5.11.0",
     "zod": "^4.3.6"
   },
   "repository": {

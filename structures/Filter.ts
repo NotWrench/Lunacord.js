@@ -72,6 +72,10 @@ export class Filter {
     this.adapter.onClear?.(this.value);
   }
 
+  applyLocally(filters: Filters): void {
+    this.filters = cloneFilters(filters);
+  }
+
   setBassboost(): Promise<void> {
     return this.set(BASSBOOST_FILTERS);
   }

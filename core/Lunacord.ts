@@ -231,6 +231,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   private readonly plugins: LunacordPlugin[] = [];
   private readonly playerNodes = new Map<string, string>();
   private readonly drainingNodes = new Set<string>();
+  private nextAutoNodeId = 1;
   private connectPromise: Promise<void> | null = null;
   private notifyingPluginError = false;
   private roundRobinIndex = 0;
@@ -246,8 +247,8 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
       cache: this.cacheManager.cache("lyrics"),
     });
 
-    for (const [index, nodeOptions] of options.nodes.entries()) {
-      this.registerNode(this.instantiateNode(nodeOptions, index));
+    for (const nodeOptions of options.nodes) {
+      this.registerNode(this.instantiateNode(nodeOptions));
     }
 
     if (options.autoConnect) {
@@ -343,7 +344,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   }
 
   async addNode(options: LunacordNodeOptions): Promise<Node> {
-    const node = this.instantiateNode(options, this.nodes.size);
+    const node = this.instantiateNode(options);
     this.logDebug("Adding node", {
       nodeId: node.id,
     });
@@ -754,8 +755,8 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     ).then(() => undefined);
   }
 
-  private instantiateNode(nodeOptions: LunacordNodeOptions, index: number): Node {
-    const id = nodeOptions.id ?? `node-${index + 1}`;
+  private instantiateNode(nodeOptions: LunacordNodeOptions): Node {
+    const id = nodeOptions.id ?? this.allocateAutoNodeId();
     return new Node(this.createNodeOptions(id, nodeOptions));
   }
 
@@ -765,6 +766,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     }
 
     this.nodes.set(node.id, node);
+    this.syncAutoNodeIdCounter(node.id);
     this.bindNodeEvents(node);
     this.attachNodeRestLogging(node);
     this.refreshNodeSearchTransformers();
@@ -1165,5 +1167,30 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
 
   private logError(message: string, data?: unknown): void {
     this.options.logger?.error?.(message, data);
+  }
+
+  private allocateAutoNodeId(): string {
+    let candidateId = `node-${this.nextAutoNodeId}`;
+    while (this.nodes.has(candidateId)) {
+      this.nextAutoNodeId += 1;
+      candidateId = `node-${this.nextAutoNodeId}`;
+    }
+
+    this.nextAutoNodeId += 1;
+    return candidateId;
+  }
+
+  private syncAutoNodeIdCounter(nodeId: string): void {
+    const match = /^node-(\d+)$/.exec(nodeId);
+    if (!match) {
+      return;
+    }
+
+    const numericId = Number(match[1]);
+    if (!Number.isFinite(numericId) || numericId < this.nextAutoNodeId) {
+      return;
+    }
+
+    this.nextAutoNodeId = numericId + 1;
   }
 }

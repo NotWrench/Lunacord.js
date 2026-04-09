@@ -148,6 +148,35 @@ describe("Lunacord", () => {
     expect(lunacord.getNode("node-c")).toBe(node);
   });
 
+  it("should allocate unique auto node IDs after removals", async () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      nodes: [
+        {
+          host: "localhost",
+          port: 2333,
+          password: "pass-a",
+        },
+        {
+          host: "localhost",
+          port: 2444,
+          password: "pass-b",
+        },
+      ],
+    });
+
+    await lunacord.removeNode("node-1");
+
+    const node = await lunacord.addNode({
+      host: "localhost",
+      port: 2555,
+      password: "pass-c",
+    });
+
+    expect(node.id).toBe("node-3");
+    expect(lunacord.getNode("node-3")).toBe(node);
+  });
+
   it("should fail startup clearly when one managed node fails", async () => {
     const connectSpy = spyOn(Node.prototype, "connect").mockImplementation(function (this: Node) {
       if (this.id === "node-b") {
