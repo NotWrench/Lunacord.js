@@ -1,5 +1,13 @@
+import { NodeBuilder, type NodeBuilderStart } from "../builders/NodeBuilder";
+import { PlayerBuilder, type PlayerBuilderStart } from "../builders/PlayerBuilder";
+import { PluginBuilder } from "../builders/PluginBuilder";
 import { CacheManager } from "../cache/CacheManager";
 import type { CacheOptions } from "../cache/types";
+import {
+  LavalinkConnectionError,
+  LunacordBaseError,
+  NodeUnavailableError,
+} from "../errors/LunacordError";
 import { LyricsClient } from "../lyrics/LyricsClient";
 import type {
   RestErrorContext,
@@ -25,15 +33,20 @@ import {
 } from "./Node";
 import type { Player, PlayerOptions } from "./Player";
 
-export class LunacordError extends Error {
-  override readonly cause?: unknown;
+export class LunacordError extends LunacordBaseError<"NODE_ERROR", { nodeId: string }> {
   readonly node: Node;
 
   constructor(error: Error, node: Node) {
-    super(error.message);
+    super({
+      code: "NODE_ERROR",
+      message: error.message,
+      context: {
+        nodeId: node.id,
+      },
+      cause: "cause" in error ? error.cause : undefined,
+    });
     this.name = error.name;
     this.node = node;
-    this.cause = "cause" in error ? error.cause : undefined;
     this.stack = error.stack;
   }
 }
@@ -224,6 +237,9 @@ export interface LunacordPlugin {
 }
 
 export class Lunacord extends TypedEventEmitter<LunacordEvents> {
+  readonly players = {
+    create: (): PlayerBuilderStart => new PlayerBuilder(this),
+  };
   private readonly cacheManager: CacheManager;
   private readonly lyricsClient: LyricsClient;
   private readonly nodes = new Map<string, Node>();
@@ -274,7 +290,14 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
 
     const sendGatewayPayload = this.options.sendGatewayPayload;
     if (!sendGatewayPayload) {
-      throw new Error("Lunacord was not configured with sendGatewayPayload");
+      throw new LavalinkConnectionError({
+        code: "GATEWAY_FORWARDER_MISSING",
+        message: "Lunacord was not configured with sendGatewayPayload",
+        context: {
+          channelId,
+          guildId,
+        },
+      });
     }
 
     await sendGatewayPayload(guildId, {
@@ -327,7 +350,13 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     await node.disconnectVoice(guildId);
   }
 
-  createPlayer(guildId: string, options?: CreatePlayerOptions): Player {
+  createPlayer(): PlayerBuilderStart;
+  createPlayer(guildId: string, options?: CreatePlayerOptions): Player;
+  createPlayer(guildId?: string, options?: CreatePlayerOptions): Player | PlayerBuilderStart {
+    if (!guildId) {
+      return new PlayerBuilder(this);
+    }
+
     const existing = this.getPlayer(guildId);
     if (existing) {
       return existing;
@@ -335,12 +364,34 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
 
     const node = this.selectNode(guildId, options);
     if (!node) {
-      throw new Error("No connected Lavalink nodes are available");
+      throw new NodeUnavailableError({
+        code: "NO_AVAILABLE_NODE",
+        message: "No connected Lavalink nodes are available",
+        context: {
+          guildId,
+          preferredNodeIds: options?.preferredNodeIds,
+          region: options?.region,
+        },
+      });
     }
 
     const player = node.createPlayer(guildId, this.toPlayerOptions(options));
     this.playerNodes.set(guildId, node.id);
     return player;
+  }
+
+  /**
+   * Starts a fluent node builder for registering a managed Lavalink node.
+   */
+  createNode(): NodeBuilderStart {
+    return new NodeBuilder(this);
+  }
+
+  /**
+   * Starts a fluent plugin builder for registering a typed Lunacord plugin.
+   */
+  createPlugin(name: string): PluginBuilder {
+    return new PluginBuilder(this, name);
   }
 
   async addNode(options: LunacordNodeOptions): Promise<Node> {
@@ -360,7 +411,13 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   async removeNode(nodeId: string): Promise<void> {
     const node = this.nodes.get(nodeId);
     if (!node) {
-      throw new Error(`Node ${nodeId} does not exist`);
+      throw new NodeUnavailableError({
+        code: "NODE_NOT_FOUND",
+        message: `Node ${nodeId} does not exist`,
+        context: {
+          nodeId,
+        },
+      });
     }
 
     this.drainingNodes.add(nodeId);
@@ -780,7 +837,13 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
 
   private registerNode(node: Node): void {
     if (this.nodes.has(node.id)) {
-      throw new Error(`Node ${node.id} is already registered`);
+      throw new NodeUnavailableError({
+        code: "NODE_ALREADY_REGISTERED",
+        message: `Node ${node.id} is already registered`,
+        context: {
+          nodeId: node.id,
+        },
+      });
     }
 
     this.nodes.set(node.id, node);
@@ -1100,7 +1163,14 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     );
 
     if (!nextNode) {
-      throw new Error(`No migration target is available for node ${sourceNodeId}`);
+      throw new NodeUnavailableError({
+        code: "NO_AVAILABLE_NODE",
+        message: `No migration target is available for node ${sourceNodeId}`,
+        context: {
+          nodeId: sourceNodeId,
+          preferredNodeIds,
+        },
+      });
     }
 
     return nextNode.id;

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { PlayerNodeAdapter } from "../core/Player";
 import { Player } from "../core/Player";
+import { InvalidPlayerStateError } from "../errors/LunacordError";
 import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Filter } from "../structures/Filter";
 import { Queue } from "../structures/Queue";
@@ -304,7 +305,7 @@ describe("Player", () => {
     });
 
     it("should throw when there is no current track", async () => {
-      await expect(player.seek(1_000)).rejects.toThrow("Cannot seek without a current track");
+      await expect(player.seek(1_000)).rejects.toBeInstanceOf(InvalidPlayerStateError);
     });
   });
 
@@ -320,9 +321,7 @@ describe("Player", () => {
     });
 
     it("should throw when node adapter does not expose connectVoice", async () => {
-      await expect(player.connect("channel-123")).rejects.toThrow(
-        "Player node adapter does not expose connectVoice"
-      );
+      await expect(player.connect("channel-123")).rejects.toBeInstanceOf(InvalidPlayerStateError);
     });
   });
 
@@ -822,6 +821,7 @@ describe("Player", () => {
     it("should export and import player state", async () => {
       mockNode.getVoiceChannelId = mock(() => "channel-123");
       player.current = track;
+      player.setTextChannel("text-123");
       player.volume = 75;
       player.paused = true;
       player.endTime = 12_000;
@@ -846,6 +846,7 @@ describe("Player", () => {
       expect(importedPlayer.history.peek()?.title).toBe(track.title);
       expect(importedPlayer.volume).toBe(75);
       expect(importedPlayer.endTime).toBe(12_000);
+      expect(importedPlayer.textChannelId).toBe("text-123");
       expect(importedPlayer.isRepeatQueueEnabled).toBe(true);
     });
 

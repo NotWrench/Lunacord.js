@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn, vi } from "bu
 import { NoopCacheStore } from "../cache/stores/NoopCacheStore";
 import { Lunacord } from "../core/Lunacord";
 import { Node } from "../core/Node";
+import { LavalinkConnectionError, NodeUnavailableError } from "../errors/LunacordError";
 import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Track } from "../structures/Track";
 import { type LoadResult, type RawTrack, SearchProvider } from "../types";
@@ -148,6 +149,50 @@ describe("Lunacord", () => {
     expect(lunacord.getNode("node-c")).toBe(node);
   });
 
+  it("should build and connect a player through the fluent builder", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const [nodeA] = lunacord.getNodes();
+
+    nodeA!.sessionId = "session-a";
+    nodeA!.rest.updatePlayer = mock(() => Promise.resolve());
+    nodeA!.connectVoice = mock(() => Promise.resolve());
+
+    const player = await lunacord
+      .createPlayer()
+      .setGuild("guild-builder")
+      .setVoiceChannel("voice-builder")
+      .setTextChannel("text-builder")
+      .connect();
+
+    expect(player.guildId).toBe("guild-builder");
+    expect(player.textChannelId).toBe("text-builder");
+    expect(nodeA!.getPlayer("guild-builder")).toBe(player);
+  });
+
+  it("should build and register a node through the fluent builder", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+
+    const node = await lunacord
+      .createNode()
+      .setId("node-builder")
+      .setHost("localhost")
+      .setPort(2666)
+      .setPassword("pass-builder")
+      .register();
+
+    expect(node.id).toBe("node-builder");
+    expect(lunacord.getNode("node-builder")).toBe(node);
+  });
+
+  it("should build and register a plugin through the fluent builder", () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const observe = mock(() => {});
+
+    const returned = lunacord.createPlugin("plugin-builder").observe(observe).use();
+
+    expect(returned).toBe(lunacord);
+  });
+
   it("should allocate unique auto node IDs after removals", async () => {
     const lunacord = new Lunacord({
       ...BASE_OPTIONS,
@@ -191,6 +236,15 @@ describe("Lunacord", () => {
 
     await expect(lunacord.connect()).rejects.toThrow("Failed to connect node node-b: boom");
     expect(connectSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("should throw a structured node error when no nodes are available", () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      nodes: [],
+    });
+
+    expect(() => lunacord.createPlayer("guild-no-node")).toThrow(NodeUnavailableError);
   });
 
   it("should choose the least-loaded node for new players", () => {
@@ -836,6 +890,17 @@ describe("Lunacord", () => {
         self_deaf: true,
       },
     });
+  });
+
+  it("should throw a structured connection error when gateway forwarding is unavailable", async () => {
+    const lunacord = new Lunacord({
+      ...BASE_OPTIONS,
+      nodes: [],
+    });
+
+    await expect(lunacord.connectVoice("guild-1", "voice-1")).rejects.toBeInstanceOf(
+      LavalinkConnectionError
+    );
   });
 
   it("should connect a player to voice with connectPlayer", async () => {
