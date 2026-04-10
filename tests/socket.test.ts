@@ -51,6 +51,51 @@ describe("Socket", () => {
     }
   });
 
+  it("should preserve original cause when remapping headers-unsupported errors", () => {
+    const originalWebSocket = globalThis.WebSocket;
+
+    class HeaderRejectingWebSocket {
+      static readonly OPEN = 1;
+
+      constructor(_url: string | URL, protocols?: string | string[]) {
+        if (protocols !== undefined) {
+          throw new TypeError("invalid protocols");
+        }
+      }
+
+      close(): void {}
+      send(): void {}
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onopen: (() => void) | null = null;
+      readonly readyState = HeaderRejectingWebSocket.OPEN;
+    }
+
+    globalThis.WebSocket = HeaderRejectingWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const socket = new Socket(SOCKET_OPTIONS);
+      let thrown: unknown;
+
+      try {
+        socket.connect();
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(Error);
+      expect((thrown as Error).message).toContain("does not support custom headers");
+      expect((thrown as Error & { cause?: unknown }).cause).toBeInstanceOf(TypeError);
+      expect(
+        ((thrown as Error & { cause?: { message?: string } }).cause as { message?: string })
+          ?.message
+      ).toBe("invalid protocols");
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  });
+
   it("should preserve non-header constructor errors", () => {
     const originalWebSocket = globalThis.WebSocket;
 

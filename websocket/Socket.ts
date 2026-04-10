@@ -184,7 +184,10 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
     } catch (error) {
       if (this.isHeadersUnsupportedRuntimeError(error)) {
         throw new Error(
-          "This WebSocket runtime does not support custom headers. Provide webSocketFactory in Node/Lunacord options."
+          "This WebSocket runtime does not support custom headers. Provide webSocketFactory in Node/Lunacord options.",
+          {
+            cause: error,
+          }
         );
       }
 
