@@ -61,3 +61,8 @@ Possible result statuses:
 - `not_found`
 - `no_track`
 - `unavailable`
+
+## Architecture
+
+For a concrete roadmap to evolve Lunacord into a library-first, plugin-friendly project, see `docs/LIBRARY_BLUEPRINT.md`.
+
