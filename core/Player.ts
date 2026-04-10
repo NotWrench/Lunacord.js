@@ -1,3 +1,4 @@
+import { InvalidPlayerStateError } from "../errors/LunacordError";
 import type { LyricsClient } from "../lyrics/LyricsClient";
 import type { Rest } from "../rest/Rest";
 import {
@@ -178,6 +179,7 @@ export interface PlayerExportData {
   repeatQueueEnabled: boolean;
   repeatTrackEnabled: boolean;
   shouldResume: boolean;
+  textChannelId: string | null;
   voiceChannelId: string | null;
   volume: number;
 }
@@ -194,6 +196,7 @@ export class Player {
   position = 0;
   ping = -1;
   connected = false;
+  textChannelId: string | null = null;
   private repeatQueueEnabled = false;
   private repeatTrackEnabled = false;
   private lastStateTime = 0;
@@ -235,7 +238,14 @@ export class Player {
   private getSessionId(): string {
     const sessionId = this.node.sessionId;
     if (!sessionId) {
-      throw new Error("Node is not connected — sessionId is null");
+      throw new InvalidPlayerStateError({
+        code: "PLAYER_SESSION_UNAVAILABLE",
+        message: "Cannot perform this operation before the node session is ready",
+        context: {
+          guildId: this.guildId,
+          operation: "player.getSessionId",
+        },
+      });
     }
     return sessionId;
   }
@@ -292,11 +302,26 @@ export class Player {
 
   async connect(channelId: string, options?: VoiceConnectOptions): Promise<void> {
     if (!this.node.connectVoice) {
-      throw new Error("Player node adapter does not expose connectVoice");
+      throw new InvalidPlayerStateError({
+        code: "PLAYER_CONNECT_UNSUPPORTED",
+        message: "Player node adapter does not expose connectVoice",
+        context: {
+          guildId: this.guildId,
+          operation: "player.connect",
+        },
+      });
     }
 
     await this.node.connectVoice(this.guildId, channelId, options);
     this.connected = true;
+  }
+
+  /**
+   * Sets the text channel metadata associated with this player.
+   */
+  setTextChannel(channelId: string | null): this {
+    this.textChannelId = channelId;
+    return this;
   }
 
   async play(track?: Track, options?: { noReplace?: boolean }): Promise<void> {
@@ -623,7 +648,14 @@ export class Player {
 
   async seek(positionMs: number): Promise<void> {
     if (!this.current) {
-      throw new Error("Cannot seek without a current track");
+      throw new InvalidPlayerStateError({
+        code: "PLAYER_NOT_PLAYING",
+        message: "Cannot seek without a current track",
+        context: {
+          guildId: this.guildId,
+          operation: "player.seek",
+        },
+      });
     }
 
     const nextPosition = clampPosition(positionMs, this.current);
@@ -713,6 +745,7 @@ export class Player {
       repeatQueueEnabled: this.repeatQueueEnabled,
       repeatTrackEnabled: this.repeatTrackEnabled,
       shouldResume: Boolean(this.current && !this.paused),
+      textChannelId: this.textChannelId,
       voiceChannelId: this.node.getVoiceChannelId?.(this.guildId) ?? null,
       volume: this.volume,
     };
@@ -727,6 +760,7 @@ export class Player {
     this.paused = data.paused;
     this.position = data.position;
     this.connected = data.connected;
+    this.textChannelId = data.textChannelId;
     this.volume = data.volume;
     this.repeatQueueEnabled = data.repeatQueueEnabled;
     this.repeatTrackEnabled = data.repeatTrackEnabled;

@@ -1,3 +1,6 @@
+export { NodeBuilder, type NodeBuilderStart } from "./builders/NodeBuilder";
+export { PlayerBuilder, type PlayerBuilderStart } from "./builders/PlayerBuilder";
+export { PluginBuilder } from "./builders/PluginBuilder";
 export { Cache } from "./cache/Cache";
 export { CacheManager } from "./cache/CacheManager";
 export { MemoryCacheStore } from "./cache/stores/MemoryCacheStore";
@@ -26,6 +29,17 @@ export {
 } from "./core/Lunacord";
 export { Node } from "./core/Node";
 export { Player, type PlayerExportData, type PlayerOptions } from "./core/Player";
+export {
+  InvalidNodeStateError,
+  type InvalidNodeStateErrorCode,
+  InvalidPlayerStateError,
+  type InvalidPlayerStateErrorCode,
+  LavalinkConnectionError,
+  type LavalinkConnectionErrorCode,
+  LunacordBaseError,
+  NodeUnavailableError,
+  type NodeUnavailableErrorCode,
+} from "./errors/LunacordError";
 export { GeniusClient } from "./lyrics/GeniusClient";
 export {
   type GeniusOAuthExchangeOptions,

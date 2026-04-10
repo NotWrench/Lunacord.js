@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
+import type { TimerHandler } from "bun";
 import { Node } from "../core/Node";
 import { Track } from "../structures/Track";
 import type { RawTrack } from "../types";

@@ -26,6 +26,8 @@ const SEARCH_PROVIDERS = new Set<string>(Object.values(SearchProvider));
 
 const isSearchProvider = (value: string): value is SearchProvider => SEARCH_PROVIDERS.has(value);
 
+const DEMO_NODE_ID = "demo-node";
+
 // Forward all Discord raw packets so Lunacord can manage VOICE_* state internally.
 client.on("raw", (packet) => {
   if (!lunacord) {
@@ -39,14 +41,7 @@ client.on("clientReady", async () => {
   console.log(`[Discord] Logged in as ${client.user?.tag}`);
 
   lunacord = new Lunacord({
-    nodes: [
-      {
-        host: "localhost",
-        port: 58232,
-        password: "youshallnotpass",
-        regions: ["local"],
-      },
-    ],
+    nodes: [],
     userId: client.user!.id,
     numShards: 1,
     clientName: "LunacordDemo",
@@ -73,14 +68,14 @@ client.on("clientReady", async () => {
     },
   });
 
-  lunacord.use({
-    name: "demo-observer",
-    observe: (event) => {
+  lunacord
+    .createPlugin("demo-observer")
+    .observe((event) => {
       if (event.type === "playerSeek") {
         console.log(`[Plugin] Seeked guild ${event.guildId} to ${event.position}ms`);
       }
-    },
-  });
+    })
+    .use();
 
   lunacord.on("nodeCreate", ({ node }) => console.log(`[Lavalink] Node created: ${node.id}`));
   lunacord.on("nodeConnect", ({ node }) => console.log(`[Lavalink] Node connected: ${node.id}`));
@@ -130,6 +125,14 @@ client.on("clientReady", async () => {
   lunacord.on("error", (err) => console.error("[Lavalink] Error:", err.message));
 
   try {
+    await lunacord
+      .createNode()
+      .setId(DEMO_NODE_ID)
+      .setHost("localhost")
+      .setPort(58232)
+      .setPassword("youshallnotpass")
+      .setRegions(["local"])
+      .register();
     await lunacord.connect();
   } catch (error) {
     console.error(
@@ -144,8 +147,51 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
+  const manager = lunacord;
+  const guild = message.guild;
   const args = message.content.split(" ");
   const command = args.shift()?.toLowerCase();
+
+  const getOrCreateConnectedPlayer = async (): Promise<ReturnType<Lunacord["getPlayer"]>> => {
+    const existing = manager.getPlayer(guild.id);
+    if (existing) {
+      if (!existing.isConnected) {
+        const voiceChannel = message.member?.voice.channel;
+        if (!voiceChannel) {
+          await message.reply("Join a voice channel first.");
+          return undefined;
+        }
+
+        existing.setTextChannel(message.channel.id);
+        await existing.connect(voiceChannel.id);
+        return existing;
+      }
+
+      existing.setTextChannel(message.channel.id);
+      return existing;
+    }
+
+    const voiceChannel = message.member?.voice.channel;
+    if (!voiceChannel) {
+      await message.reply("Join a voice channel first.");
+      return undefined;
+    }
+
+    return manager
+      .createPlayer()
+      .setGuild(guild.id)
+      .setVoiceChannel(voiceChannel.id)
+      .setTextChannel(message.channel.id)
+      .connect();
+  };
+
+  const getExistingPlayer = (): ReturnType<Lunacord["getPlayer"]> => {
+    const player = manager.getPlayer(guild.id);
+    if (player) {
+      player.setTextChannel(message.channel.id);
+    }
+    return player;
+  };
 
   if (command === "!play") {
     const providerArg = args.shift()?.toLowerCase();
@@ -165,15 +211,12 @@ client.on("messageCreate", async (message) => {
       return;
     }
 
-    const voiceChannel = message.member?.voice.channel;
-    if (!voiceChannel) {
-      await message.reply("Join a voice channel first.");
-      return;
-    }
-
     try {
-      const player = lunacord.createPlayer(message.guild.id);
-      await player.connect(voiceChannel.id);
+      const player = await getOrCreateConnectedPlayer();
+      if (!player) {
+        return;
+      }
+
       const result = await player.searchAndPlay(query, providerArg);
 
       if (result.loadType === "empty" || result.loadType === "error") {
@@ -196,7 +239,7 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "!skip") {
-    const player = lunacord.getPlayer(message.guild.id);
+    const player = getExistingPlayer();
     if (!(player && player.current)) {
       await message.reply("Nothing is playing.");
       return;
@@ -224,7 +267,7 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "!repeattrack") {
-    const player = lunacord.getPlayer(message.guild.id);
+    const player = getExistingPlayer();
     if (!player) {
       await message.reply("Nothing is playing.");
       return;
@@ -235,7 +278,7 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "!repeatqueue") {
-    const player = lunacord.getPlayer(message.guild.id);
+    const player = getExistingPlayer();
     if (!player) {
       await message.reply("Nothing is playing.");
       return;
@@ -247,7 +290,7 @@ client.on("messageCreate", async (message) => {
 
   if (command === "!filter") {
     const preset = args.shift()?.toLowerCase();
-    const player = lunacord.getPlayer(message.guild.id);
+    const player = getExistingPlayer();
     if (!(player && player.current)) {
       await message.reply("Nothing is playing.");
       return;
@@ -293,7 +336,7 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "!seek") {
-    const player = lunacord.getPlayer(message.guild.id);
+    const player = getExistingPlayer();
     if (!(player && player.current)) {
       await message.reply("Nothing is playing.");
       return;
@@ -315,7 +358,7 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "!lyrics") {
-    const player = lunacord.getPlayer(message.guild.id);
+    const player = getExistingPlayer();
     if (!player) {
       await message.reply("Nothing is playing.");
       return;
@@ -369,7 +412,7 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "!shuffle") {
-    const player = lunacord.getPlayer(message.guild.id);
+    const player = getExistingPlayer();
     if (!player) {
       await message.reply("Nothing is playing.");
       return;
@@ -380,7 +423,7 @@ client.on("messageCreate", async (message) => {
   }
 
   if (command === "!stop") {
-    const player = lunacord.getPlayer(message.guild.id);
+    const player = getExistingPlayer();
     if (!player) {
       await message.reply("Nothing is playing.");
       return;
