@@ -524,5 +524,46 @@ describe("Rest", () => {
       ).rejects.toThrow("invalid payload mapping");
       expect(attempts).toBe(1);
     });
+
+    it("should retry transient fetch TypeError failures", async () => {
+      const retryRest = new Rest({
+        baseUrl: BASE_URL,
+        password: PASSWORD,
+        retryAttempts: 2,
+      });
+      let attempts = 0;
+
+      globalThis.fetch = mock(() => {
+        attempts++;
+
+        if (attempts === 1) {
+          return Promise.reject(new TypeError("Failed to fetch"));
+        }
+
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }) as unknown as typeof fetch;
+
+      await retryRest.updatePlayer("session-123", "guild-123", { paused: true });
+      expect(attempts).toBe(2);
+    });
+
+    it("should not retry deterministic fetch TypeError failures", async () => {
+      const retryRest = new Rest({
+        baseUrl: BASE_URL,
+        password: PASSWORD,
+        retryAttempts: 3,
+      });
+      let attempts = 0;
+
+      globalThis.fetch = mock(() => {
+        attempts++;
+        return Promise.reject(new TypeError("Invalid URL"));
+      }) as unknown as typeof fetch;
+
+      await expect(
+        retryRest.updatePlayer("session-123", "guild-123", { paused: true })
+      ).rejects.toThrow("Invalid URL");
+      expect(attempts).toBe(1);
+    });
   });
 });

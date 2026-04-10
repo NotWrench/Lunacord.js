@@ -101,7 +101,9 @@ const RETRYABLE_NODE_ERROR_CODES = new Set([
   "EAI_AGAIN",
 ]);
 const RETRYABLE_NETWORK_ERROR_REGEX =
-  /(network|fetch failed|socket|connection reset|timed out|temporarily unavailable)/i;
+  /(network|fetch failed|failed to fetch|socket|connection reset|timed out|temporarily unavailable)/i;
+const DETERMINISTIC_FETCH_TYPE_ERROR_REGEX =
+  /(invalid url|failed to parse url|only absolute urls are supported|unsupported protocol|request with get\/head method cannot have body|member signal is not of type abortsignal)/i;
 
 export class Rest {
   private readonly baseUrl: string;
@@ -338,19 +340,28 @@ export class Rest {
       return true;
     }
 
-    if (error instanceof TypeError) {
-      return true;
-    }
-
     if (!(error instanceof Error)) {
       return false;
+    }
+
+    const errorCode = this.extractErrorCode(error);
+
+    if (error instanceof TypeError) {
+      if (typeof errorCode === "string" && RETRYABLE_NODE_ERROR_CODES.has(errorCode)) {
+        return true;
+      }
+
+      if (DETERMINISTIC_FETCH_TYPE_ERROR_REGEX.test(error.message)) {
+        return false;
+      }
+
+      return RETRYABLE_NETWORK_ERROR_REGEX.test(error.message);
     }
 
     if (RETRYABLE_NETWORK_ERROR_REGEX.test(error.message)) {
       return true;
     }
 
-    const errorCode = this.extractErrorCode(error);
     return typeof errorCode === "string" && RETRYABLE_NODE_ERROR_CODES.has(errorCode);
   }
 
