@@ -58,11 +58,6 @@ tests/
   unit/
   integration/
   contract/
-
-docs/
-  architecture/
-  plugins/
-  migration/
 ```
 
 ### Why this helps
@@ -144,17 +139,7 @@ Standardize error isolation:
 - **Integration**: node failover, reconnect, search transforms, lyrics fallback.
 - **Plugin compatibility tests**: fixture plugins loaded against supported API versions.
 
-## 6) Documentation Expectations
-
-Add docs that plugin authors need on day one:
-
-- plugin quickstart
-- lifecycle chart
-- context reference
-- error handling guarantees
-- versioning and compatibility policy
-
-## 7) Migration Plan (Low Risk)
+## 6) Migration Plan (Low Risk)
 
 1. Add `src/` mirror folders and migrate internals incrementally.
 2. Introduce `PluginManager` with no behavior change.
@@ -163,11 +148,11 @@ Add docs that plugin authors need on day one:
 5. Add subpath exports and document them.
 6. Keep root exports stable during transition.
 
-## 8) Definition of Done
+## 7) Definition of Done
 
 Lunacord should feel library-grade when:
 
 - public API is intentionally small and versioned
 - folder layout follows runtime boundaries
 - plugins have lifecycle + compatibility checks
-- docs and tests treat third-party plugin authors as first-class users
+- tests treat plugin compatibility as a first-class concern
