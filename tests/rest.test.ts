@@ -372,6 +372,28 @@ describe("Rest", () => {
       expect(bodies).toEqual(['["patched"]']);
     });
 
+    it("should let middleware clear request body explicitly", async () => {
+      const bodies: string[] = [];
+      rest.use({
+        beforeRequest: () => ({
+          body: undefined,
+        }),
+      });
+      globalThis.fetch = mock((_url: string | URL, init?: RequestInit) => {
+        bodies.push(String(init?.body ?? ""));
+        return Promise.resolve(
+          new Response(JSON.stringify([MOCK_TRACK]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      await rest.decodeTracks(["original"]);
+
+      expect(bodies).toEqual([""]);
+    });
+
     it("should let middleware transform response data", async () => {
       rest.use({
         afterResponse: () => ({
@@ -482,6 +504,191 @@ describe("Rest", () => {
       await expect(
         timeoutRest.updatePlayer("session-123", "guild-123", { paused: true })
       ).rejects.toThrow("Request timed out after 10ms");
+    });
+
+    it("should not retry deterministic non-network errors", async () => {
+      const retryRest = new Rest({
+        baseUrl: BASE_URL,
+        password: PASSWORD,
+        retryAttempts: 3,
+      });
+      let attempts = 0;
+
+      globalThis.fetch = mock(() => {
+        attempts++;
+        return Promise.reject(new Error("invalid payload mapping"));
+      }) as unknown as typeof fetch;
+
+      await expect(
+        retryRest.updatePlayer("session-123", "guild-123", { paused: true })
+      ).rejects.toThrow("invalid payload mapping");
+      expect(attempts).toBe(1);
+    });
+
+    it("should retry on TypeError (network-level fetch failure)", async () => {
+      const retryRest = new Rest({
+        baseUrl: BASE_URL,
+        password: PASSWORD,
+        retryAttempts: 2,
+        retryDelayMs: 0,
+      });
+      let attempts = 0;
+
+      globalThis.fetch = mock(() => {
+        attempts++;
+        if (attempts < 2) {
+          return Promise.reject(new TypeError("Failed to fetch"));
+        }
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }) as unknown as typeof fetch;
+
+      await retryRest.updatePlayer("session-123", "guild-123", { paused: true });
+      expect(attempts).toBe(2);
+    });
+
+    it("should retry on errors with retryable node error codes", async () => {
+      const retryRest = new Rest({
+        baseUrl: BASE_URL,
+        password: PASSWORD,
+        retryAttempts: 2,
+        retryDelayMs: 0,
+      });
+      let attempts = 0;
+
+      globalThis.fetch = mock(() => {
+        attempts++;
+        if (attempts < 2) {
+          const err = new Error("connect ECONNRESET 127.0.0.1:2333") as Error & { code: string };
+          err.code = "ECONNRESET";
+          return Promise.reject(err);
+        }
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }) as unknown as typeof fetch;
+
+      await retryRest.updatePlayer("session-123", "guild-123", { paused: true });
+      expect(attempts).toBe(2);
+    });
+
+    it("should retry on errors with retryable code in cause", async () => {
+      const retryRest = new Rest({
+        baseUrl: BASE_URL,
+        password: PASSWORD,
+        retryAttempts: 2,
+        retryDelayMs: 0,
+      });
+      let attempts = 0;
+
+      globalThis.fetch = mock(() => {
+        attempts++;
+        if (attempts < 2) {
+          const cause = new Error("inner") as Error & { code: string };
+          cause.code = "ETIMEDOUT";
+          const err = new Error("connection failed", { cause });
+          return Promise.reject(err);
+        }
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }) as unknown as typeof fetch;
+
+      await retryRest.updatePlayer("session-123", "guild-123", { paused: true });
+      expect(attempts).toBe(2);
+    });
+
+    it("should retry on errors whose message matches the network error regex", async () => {
+      const retryRest = new Rest({
+        baseUrl: BASE_URL,
+        password: PASSWORD,
+        retryAttempts: 2,
+        retryDelayMs: 0,
+      });
+
+      for (const message of [
+        "network unreachable",
+        "fetch failed",
+        "socket hang up",
+        "connection reset by peer",
+        "request timed out",
+        "service temporarily unavailable",
+      ]) {
+        let attempts = 0;
+
+        globalThis.fetch = mock(() => {
+          attempts++;
+          if (attempts < 2) {
+            return Promise.reject(new Error(message));
+          }
+          return Promise.resolve(new Response(null, { status: 204 }));
+        }) as unknown as typeof fetch;
+
+        await retryRest.updatePlayer("session-123", "guild-123", { paused: true });
+        expect(attempts).toBe(2);
+      }
+    });
+
+    it("should not retry non-Error throws", async () => {
+      const retryRest = new Rest({
+        baseUrl: BASE_URL,
+        password: PASSWORD,
+        retryAttempts: 3,
+        retryDelayMs: 0,
+      });
+      let attempts = 0;
+
+      globalThis.fetch = mock(() => {
+        attempts++;
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        return Promise.reject("string error");
+      }) as unknown as typeof fetch;
+
+      await expect(
+        retryRest.updatePlayer("session-123", "guild-123", { paused: true })
+      ).rejects.toBe("string error");
+      expect(attempts).toBe(1);
+    });
+  });
+
+  describe("middleware body patch semantics", () => {
+    it("should let middleware set body to null explicitly", async () => {
+      const bodies: Array<string | null> = [];
+      rest.use({
+        beforeRequest: () => ({
+          body: null,
+        }),
+      });
+      globalThis.fetch = mock((_url: string | URL, init?: RequestInit) => {
+        bodies.push(init?.body !== undefined ? String(init.body) : null);
+        return Promise.resolve(
+          new Response(JSON.stringify([MOCK_TRACK]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      await rest.decodeTracks(["original"]);
+
+      expect(bodies).toEqual(["null"]);
+    });
+
+    it("should preserve original body when patch does not include body key", async () => {
+      const bodies: string[] = [];
+      rest.use({
+        beforeRequest: () => ({
+          method: "POST",
+        }),
+      });
+      globalThis.fetch = mock((_url: string | URL, init?: RequestInit) => {
+        bodies.push(String(init?.body ?? ""));
+        return Promise.resolve(
+          new Response(JSON.stringify([MOCK_TRACK]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      await rest.decodeTracks(["original"]);
+
+      expect(bodies).toEqual(['["original"]']);
     });
   });
 });

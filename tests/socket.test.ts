@@ -51,6 +51,177 @@ describe("Socket", () => {
     }
   });
 
+  it("should preserve non-header constructor errors", () => {
+    const originalWebSocket = globalThis.WebSocket;
+
+    class BrokenWebSocket {
+      static readonly OPEN = 1;
+
+      constructor() {
+        throw new Error("DNS lookup failed");
+      }
+
+      close(): void {}
+      send(): void {}
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onopen: (() => void) | null = null;
+      readonly readyState = BrokenWebSocket.OPEN;
+    }
+
+    globalThis.WebSocket = BrokenWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const socket = new Socket(SOCKET_OPTIONS);
+      expect(() => socket.connect()).toThrow("DNS lookup failed");
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  });
+
+  it("should wrap non-Error constructor throws in a new Error", () => {
+    const originalWebSocket = globalThis.WebSocket;
+
+    class ThrowingWebSocket {
+      static readonly OPEN = 1;
+
+      constructor() {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw "unexpected string error";
+      }
+
+      close(): void {}
+      send(): void {}
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onopen: (() => void) | null = null;
+      readonly readyState = ThrowingWebSocket.OPEN;
+    }
+
+    globalThis.WebSocket = ThrowingWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const socket = new Socket(SOCKET_OPTIONS);
+      expect(() => socket.connect()).toThrow("Failed to create WebSocket");
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  });
+
+  it("should map 'invalid protocols' constructor error to friendly message", () => {
+    const originalWebSocket = globalThis.WebSocket;
+    const message = "invalid protocols";
+
+    class ProtocolRejectingWebSocket {
+      static readonly OPEN = 1;
+      constructor() { throw new TypeError(message); }
+      close(): void {}
+      send(): void {}
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onopen: (() => void) | null = null;
+      readonly readyState = ProtocolRejectingWebSocket.OPEN;
+    }
+
+    globalThis.WebSocket = ProtocolRejectingWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const socket = new Socket(SOCKET_OPTIONS);
+      expect(() => socket.connect()).toThrow(
+        "This WebSocket runtime does not support custom headers. Provide webSocketFactory in Node/Lunacord options."
+      );
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  });
+
+  it("should map 'unsupported headers' constructor error to friendly message", () => {
+    const originalWebSocket = globalThis.WebSocket;
+    const message = "unsupported headers";
+
+    class ProtocolRejectingWebSocket {
+      static readonly OPEN = 1;
+      constructor() { throw new TypeError(message); }
+      close(): void {}
+      send(): void {}
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onopen: (() => void) | null = null;
+      readonly readyState = ProtocolRejectingWebSocket.OPEN;
+    }
+
+    globalThis.WebSocket = ProtocolRejectingWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const socket = new Socket(SOCKET_OPTIONS);
+      expect(() => socket.connect()).toThrow(
+        "This WebSocket runtime does not support custom headers. Provide webSocketFactory in Node/Lunacord options."
+      );
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  });
+
+  it("should map 'subprotocol' constructor error to friendly message", () => {
+    const originalWebSocket = globalThis.WebSocket;
+    const message = "subprotocol error";
+
+    class ProtocolRejectingWebSocket {
+      static readonly OPEN = 1;
+      constructor() { throw new TypeError(message); }
+      close(): void {}
+      send(): void {}
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onopen: (() => void) | null = null;
+      readonly readyState = ProtocolRejectingWebSocket.OPEN;
+    }
+
+    globalThis.WebSocket = ProtocolRejectingWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const socket = new Socket(SOCKET_OPTIONS);
+      expect(() => socket.connect()).toThrow(
+        "This WebSocket runtime does not support custom headers. Provide webSocketFactory in Node/Lunacord options."
+      );
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  });
+
+  it("should map 'protocol value' constructor error to friendly message", () => {
+    const originalWebSocket = globalThis.WebSocket;
+    const message = "protocol value rejected";
+
+    class ProtocolRejectingWebSocket {
+      static readonly OPEN = 1;
+      constructor() { throw new TypeError(message); }
+      close(): void {}
+      send(): void {}
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onopen: (() => void) | null = null;
+      readonly readyState = ProtocolRejectingWebSocket.OPEN;
+    }
+
+    globalThis.WebSocket = ProtocolRejectingWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const socket = new Socket(SOCKET_OPTIONS);
+      expect(() => socket.connect()).toThrow(
+        "This WebSocket runtime does not support custom headers. Provide webSocketFactory in Node/Lunacord options."
+      );
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  });
+
   it("should emit an error for invalid websocket payloads", () => {
     const socket = new Socket(SOCKET_OPTIONS);
     const errors: Error[] = [];
@@ -167,6 +338,62 @@ describe("Socket", () => {
     );
 
     expect(readyEvents).toEqual(["binary"]);
+  });
+
+  it("should decode sliced typed-array websocket messages", () => {
+    const socket = new Socket(SOCKET_OPTIONS);
+    const readyEvents: string[] = [];
+    const handleMessage = Reflect.get(socket, "handleMessage") as (
+      this: Socket,
+      raw: Uint8Array
+    ) => void;
+
+    socket.on("ready", (payload) => {
+      readyEvents.push(payload.sessionId);
+    });
+
+    const encoded = new TextEncoder().encode(
+      JSON.stringify({ op: "ready", resumed: false, sessionId: "typed-view" })
+    );
+    const padded = new Uint8Array(encoded.length + 4);
+    padded.set(encoded, 2);
+    const slicedView = padded.subarray(2, 2 + encoded.length);
+
+    handleMessage.call(socket, slicedView);
+
+    expect(readyEvents).toEqual(["typed-view"]);
+  });
+
+  it("should decode typed-array view with non-zero byteOffset correctly and not read padding bytes", () => {
+    const socket = new Socket(SOCKET_OPTIONS);
+    const errors: Error[] = [];
+    const readyEvents: string[] = [];
+    const handleMessage = Reflect.get(socket, "handleMessage") as (
+      this: Socket,
+      raw: Uint8Array
+    ) => void;
+
+    socket.on("error", (err) => errors.push(err));
+    socket.on("ready", (payload) => readyEvents.push(payload.sessionId));
+
+    const payload = JSON.stringify({ op: "ready", resumed: false, sessionId: "offset-view" });
+    const payloadBytes = new TextEncoder().encode(payload);
+
+    // Create a buffer with 8 bytes of garbage before and after the payload
+    const garbageBefore = 8;
+    const garbageAfter = 8;
+    const fullBuffer = new Uint8Array(garbageBefore + payloadBytes.length + garbageAfter);
+    // Fill the whole buffer with 0xFF to ensure garbage bytes are non-null
+    fullBuffer.fill(0xff);
+    fullBuffer.set(payloadBytes, garbageBefore);
+
+    // Slice exactly the payload region
+    const view = fullBuffer.subarray(garbageBefore, garbageBefore + payloadBytes.length);
+
+    handleMessage.call(socket, view);
+
+    expect(errors).toHaveLength(0);
+    expect(readyEvents).toEqual(["offset-view"]);
   });
 
   it("should honor reconnect configuration", () => {

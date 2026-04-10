@@ -174,6 +174,108 @@ describe("Queue", () => {
     ]);
   });
 
+  it("should accept an injected RNG for deterministic shuffle", () => {
+    const queue = new Queue();
+    queue.enqueueMany([
+      Track.from(MOCK_RAW_TRACK),
+      Track.from(MOCK_RAW_TRACK_2),
+      Track.from({
+        ...MOCK_RAW_TRACK,
+        encoded: "track-3",
+        info: {
+          ...MOCK_RAW_TRACK.info,
+          identifier: "id-3",
+          title: "Track 3",
+        },
+      }),
+    ]);
+
+    queue.shuffle(() => 0);
+
+    expect(queue.toArray().map((track) => track.encoded)).toEqual([
+      "track-2",
+      "track-3",
+      "track-1",
+    ]);
+  });
+
+  it("should be a no-op when shuffling an empty queue", () => {
+    const queue = new Queue();
+    const calls: number[] = [];
+    queue.shuffle(() => {
+      calls.push(1);
+      return 0;
+    });
+
+    expect(queue.isEmpty).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("should be a no-op when shuffling a single-element queue", () => {
+    const queue = new Queue();
+    const track = Track.from(MOCK_RAW_TRACK);
+    queue.enqueue(track);
+
+    const calls: number[] = [];
+    queue.shuffle(() => {
+      calls.push(1);
+      return 0;
+    });
+
+    expect(queue.size).toBe(1);
+    expect(queue.peek()).toBe(track);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("should produce deterministic results with always-max RNG", () => {
+    const queue = new Queue();
+    queue.enqueueMany([
+      Track.from(MOCK_RAW_TRACK),
+      Track.from(MOCK_RAW_TRACK_2),
+      Track.from({
+        ...MOCK_RAW_TRACK,
+        encoded: "track-3",
+        info: {
+          ...MOCK_RAW_TRACK.info,
+          identifier: "id-3",
+          title: "Track 3",
+        },
+      }),
+    ]);
+
+    // always-max RNG (just under 1) means randomIndex always equals index -> identity permutation
+    queue.shuffle(() => 0.9999);
+
+    const encoded = queue.toArray().map((track) => track.encoded);
+    expect(encoded).toHaveLength(3);
+    expect(new Set(encoded)).toEqual(new Set(["track-1", "track-2", "track-3"]));
+  });
+
+  it("should call injected RNG exactly (n-1) times for n tracks", () => {
+    const queue = new Queue();
+    queue.enqueueMany([
+      Track.from(MOCK_RAW_TRACK),
+      Track.from(MOCK_RAW_TRACK_2),
+      Track.from({
+        ...MOCK_RAW_TRACK,
+        encoded: "track-3",
+        info: {
+          ...MOCK_RAW_TRACK.info,
+          identifier: "id-3",
+          title: "Track 3",
+        },
+      }),
+    ]);
+
+    const calls: number[] = [];
+    queue.shuffle(() => {
+      calls.push(1);
+      return 0.5;
+    });
+
+    expect(calls).toHaveLength(2);
+  });
+
   it("should remove duplicates by encoded track", () => {
     const queue = new Queue();
     queue.enqueueMany([
