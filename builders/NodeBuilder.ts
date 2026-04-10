@@ -1,5 +1,6 @@
 import type { Lunacord, LunacordNodeOptions } from "../core/Lunacord";
 import type { Node } from "../core/Node";
+import { InvalidNodeStateError } from "../errors/LunacordError";
 
 type BuilderFlag = true | false;
 
@@ -42,10 +43,8 @@ export class NodeBuilder<TState extends NodeBuilderState> {
   /**
    * Registers the node once all required fields are configured.
    */
-  readonly register = (() =>
-    this.client.addNode(this.config as LunacordNodeOptions)) as TState extends NodeBuilderReadyState
-    ? () => Promise<Node>
-    : never;
+  readonly register = (async (): Promise<Node> =>
+    this.registerInternal()) as TState extends NodeBuilderReadyState ? () => Promise<Node> : never;
 
   /**
    * Sets the node host.
@@ -137,5 +136,36 @@ export class NodeBuilder<TState extends NodeBuilderState> {
       requestRetryDelayMs: options.retryDelayMs,
       requestTimeoutMs: options.timeoutMs,
     });
+  }
+
+  private async registerInternal(): Promise<Node> {
+    const { host, id, password, port } = this.config;
+    const missingFields: ("host" | "password" | "port")[] = [];
+
+    if (typeof host !== "string" || host.length === 0) {
+      missingFields.push("host");
+    }
+
+    if (typeof password !== "string" || password.length === 0) {
+      missingFields.push("password");
+    }
+
+    if (typeof port !== "number" || !Number.isFinite(port)) {
+      missingFields.push("port");
+    }
+
+    if (missingFields.length > 0) {
+      throw new InvalidNodeStateError({
+        code: "NODE_NOT_READY",
+        message: "Cannot register a node before host, port, and password are set",
+        context: {
+          missingFields,
+          nodeId: id,
+          operation: "nodeBuilder.register",
+        },
+      });
+    }
+
+    return this.client.addNode(this.config as LunacordNodeOptions);
   }
 }

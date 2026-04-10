@@ -63,6 +63,22 @@ export class NodeUnavailableError extends LunacordBaseError<
   NodeUnavailableErrorContext
 > {}
 
+export type InvalidNodeStateErrorCode = "NODE_NOT_READY";
+
+export interface InvalidNodeStateErrorContext {
+  missingFields: readonly ("host" | "password" | "port")[];
+  nodeId?: string;
+  operation: string;
+}
+
+/**
+ * Raised when a node operation is attempted in an invalid lifecycle state.
+ */
+export class InvalidNodeStateError extends LunacordBaseError<
+  InvalidNodeStateErrorCode,
+  InvalidNodeStateErrorContext
+> {}
+
 export type InvalidPlayerStateErrorCode =
   | "PLAYER_CONNECT_UNSUPPORTED"
   | "PLAYER_NOT_PLAYING"

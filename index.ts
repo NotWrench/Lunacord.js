@@ -30,6 +30,8 @@ export {
 export { Node } from "./core/Node";
 export { Player, type PlayerExportData, type PlayerOptions } from "./core/Player";
 export {
+  InvalidNodeStateError,
+  type InvalidNodeStateErrorCode,
   InvalidPlayerStateError,
   type InvalidPlayerStateErrorCode,
   LavalinkConnectionError,

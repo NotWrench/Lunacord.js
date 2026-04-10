@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn, vi } from "bu
 import { NoopCacheStore } from "../cache/stores/NoopCacheStore";
 import { Lunacord } from "../core/Lunacord";
 import { Node } from "../core/Node";
-import { LavalinkConnectionError, NodeUnavailableError } from "../errors/LunacordError";
+import {
+  InvalidNodeStateError,
+  LavalinkConnectionError,
+  NodeUnavailableError,
+} from "../errors/LunacordError";
 import type { LyricsClient } from "../lyrics/LyricsClient";
 import { Track } from "../structures/Track";
 import { type LoadResult, type RawTrack, SearchProvider } from "../types";
@@ -182,6 +186,24 @@ describe("Lunacord", () => {
 
     expect(node.id).toBe("node-builder");
     expect(lunacord.getNode("node-builder")).toBe(node);
+  });
+
+  it("should fail early when registering an incomplete node builder", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const unsafeBuilder = lunacord.createNode().setHost("localhost") as unknown as {
+      register: () => Promise<Node>;
+    };
+
+    const registration = unsafeBuilder.register();
+
+    await expect(registration).rejects.toBeInstanceOf(InvalidNodeStateError);
+    await expect(registration).rejects.toMatchObject({
+      code: "NODE_NOT_READY",
+      context: {
+        missingFields: ["password", "port"],
+        operation: "nodeBuilder.register",
+      },
+    });
   });
 
   it("should build and register a plugin through the fluent builder", () => {

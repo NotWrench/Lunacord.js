@@ -353,7 +353,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
   createPlayer(): PlayerBuilderStart;
   createPlayer(guildId: string, options?: CreatePlayerOptions): Player;
   createPlayer(guildId?: string, options?: CreatePlayerOptions): Player | PlayerBuilderStart {
-    if (!guildId) {
+    if (guildId === undefined) {
       return new PlayerBuilder(this);
     }
 
