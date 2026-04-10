@@ -51,6 +51,35 @@ describe("Socket", () => {
     }
   });
 
+  it("should preserve non-header constructor errors", () => {
+    const originalWebSocket = globalThis.WebSocket;
+
+    class BrokenWebSocket {
+      static readonly OPEN = 1;
+
+      constructor() {
+        throw new Error("DNS lookup failed");
+      }
+
+      close(): void {}
+      send(): void {}
+      onclose: ((event: CloseEvent) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onopen: (() => void) | null = null;
+      readonly readyState = BrokenWebSocket.OPEN;
+    }
+
+    globalThis.WebSocket = BrokenWebSocket as unknown as typeof WebSocket;
+
+    try {
+      const socket = new Socket(SOCKET_OPTIONS);
+      expect(() => socket.connect()).toThrow("DNS lookup failed");
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  });
+
   it("should emit an error for invalid websocket payloads", () => {
     const socket = new Socket(SOCKET_OPTIONS);
     const errors: Error[] = [];
@@ -167,6 +196,30 @@ describe("Socket", () => {
     );
 
     expect(readyEvents).toEqual(["binary"]);
+  });
+
+  it("should decode sliced typed-array websocket messages", () => {
+    const socket = new Socket(SOCKET_OPTIONS);
+    const readyEvents: string[] = [];
+    const handleMessage = Reflect.get(socket, "handleMessage") as (
+      this: Socket,
+      raw: Uint8Array
+    ) => void;
+
+    socket.on("ready", (payload) => {
+      readyEvents.push(payload.sessionId);
+    });
+
+    const encoded = new TextEncoder().encode(
+      JSON.stringify({ op: "ready", resumed: false, sessionId: "typed-view" })
+    );
+    const padded = new Uint8Array(encoded.length + 4);
+    padded.set(encoded, 2);
+    const slicedView = padded.subarray(2, 2 + encoded.length);
+
+    handleMessage.call(socket, slicedView);
+
+    expect(readyEvents).toEqual(["typed-view"]);
   });
 
   it("should honor reconnect configuration", () => {

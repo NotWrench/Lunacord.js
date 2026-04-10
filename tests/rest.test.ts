@@ -372,6 +372,28 @@ describe("Rest", () => {
       expect(bodies).toEqual(['["patched"]']);
     });
 
+    it("should let middleware clear request body explicitly", async () => {
+      const bodies: string[] = [];
+      rest.use({
+        beforeRequest: () => ({
+          body: undefined,
+        }),
+      });
+      globalThis.fetch = mock((_url: string | URL, init?: RequestInit) => {
+        bodies.push(String(init?.body ?? ""));
+        return Promise.resolve(
+          new Response(JSON.stringify([MOCK_TRACK]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        );
+      }) as unknown as typeof fetch;
+
+      await rest.decodeTracks(["original"]);
+
+      expect(bodies).toEqual([""]);
+    });
+
     it("should let middleware transform response data", async () => {
       rest.use({
         afterResponse: () => ({
@@ -482,6 +504,25 @@ describe("Rest", () => {
       await expect(
         timeoutRest.updatePlayer("session-123", "guild-123", { paused: true })
       ).rejects.toThrow("Request timed out after 10ms");
+    });
+
+    it("should not retry deterministic non-network errors", async () => {
+      const retryRest = new Rest({
+        baseUrl: BASE_URL,
+        password: PASSWORD,
+        retryAttempts: 3,
+      });
+      let attempts = 0;
+
+      globalThis.fetch = mock(() => {
+        attempts++;
+        return Promise.reject(new Error("invalid payload mapping"));
+      }) as unknown as typeof fetch;
+
+      await expect(
+        retryRest.updatePlayer("session-123", "guild-123", { paused: true })
+      ).rejects.toThrow("invalid payload mapping");
+      expect(attempts).toBe(1);
     });
   });
 });

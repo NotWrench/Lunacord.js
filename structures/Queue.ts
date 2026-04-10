@@ -47,9 +47,9 @@ export class Queue {
     return this.tracks[0];
   }
 
-  shuffle(): void {
+  shuffle(random: () => number = Math.random): void {
     for (let index = this.tracks.length - 1; index > 0; index--) {
-      const randomIndex = Math.floor(Math.random() * (index + 1));
+      const randomIndex = Math.floor(random() * (index + 1));
       [this.tracks[index], this.tracks[randomIndex]] = [
         this.tracks[randomIndex]!,
         this.tracks[index]!,

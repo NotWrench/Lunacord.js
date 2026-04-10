@@ -89,6 +89,19 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_RETRY_ATTEMPTS = 1;
 const DEFAULT_RETRY_DELAY_MS = 250;
 const RETRYABLE_STATUS_CODES = new Set([408, 429, 502, 503, 504]);
+const RETRYABLE_NODE_ERROR_CODES = new Set([
+  "ECONNABORTED",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "EHOSTUNREACH",
+  "EPIPE",
+  "ETIMEDOUT",
+  "ENETDOWN",
+  "ENETUNREACH",
+  "EAI_AGAIN",
+]);
+const RETRYABLE_NETWORK_ERROR_REGEX =
+  /(network|fetch failed|socket|connection reset|timed out|temporarily unavailable)/i;
 
 export class Rest {
   private readonly baseUrl: string;
@@ -244,11 +257,14 @@ export class Rest {
         continue;
       }
 
+      const nextPath = patch.path ?? request.path;
+      const hasBodyPatch = Object.prototype.hasOwnProperty.call(patch, "body");
+
       request = {
         method: patch.method ?? request.method,
-        path: patch.path ?? request.path,
-        body: patch.body ?? request.body,
-        url: `${this.baseUrl}${patch.path ?? request.path}`,
+        path: nextPath,
+        body: hasBodyPatch ? patch.body : request.body,
+        url: `${this.baseUrl}${nextPath}`,
       };
     }
 
@@ -322,7 +338,43 @@ export class Rest {
       return true;
     }
 
-    return error instanceof Error;
+    if (error instanceof TypeError) {
+      return true;
+    }
+
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    if (RETRYABLE_NETWORK_ERROR_REGEX.test(error.message)) {
+      return true;
+    }
+
+    const errorCode = this.extractErrorCode(error);
+    return typeof errorCode === "string" && RETRYABLE_NODE_ERROR_CODES.has(errorCode);
+  }
+
+  private extractErrorCode(error: Error): string | undefined {
+    const withCode = error as Error & {
+      code?: unknown;
+      cause?: unknown;
+    };
+
+    if (typeof withCode.code === "string") {
+      return withCode.code;
+    }
+
+    const causeWithCode = withCode.cause as
+      | {
+          code?: unknown;
+        }
+      | undefined;
+
+    if (causeWithCode && typeof causeWithCode.code === "string") {
+      return causeWithCode.code;
+    }
+
+    return undefined;
   }
 
   private shouldRetryResponse(status: number, attempt: number): boolean {

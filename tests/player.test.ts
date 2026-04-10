@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock, spyOn, vi } from "bun:test";
+import { beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import type { PlayerNodeAdapter } from "../core/Player";
 import { Player } from "../core/Player";
 import type { LyricsClient } from "../lyrics/LyricsClient";
@@ -122,7 +122,6 @@ describe("Player", () => {
   let track2: Track;
 
   beforeEach(() => {
-    vi.useRealTimers();
     mockNode = createMockNode();
     player = new Player("guild-123", mockNode);
     track = new Track(MOCK_RAW_TRACK);

@@ -68,6 +68,8 @@ export type WebSocketFactory = (context: WebSocketFactoryContext) => WebSocketLi
 const SOCKET_READY_STATE_OPEN = 1;
 const UNKNOWN_CLOSE_CODE = 1006;
 const UNKNOWN_CLOSE_REASON = "WebSocket closed";
+const HEADERS_UNSUPPORTED_ERROR_REGEX =
+  /(invalid\s+protocols?|subprotocol|protocol\s+value|unsupported\s+headers?)/i;
 
 export class Socket extends TypedEventEmitter<SocketEvents> {
   private readonly options: SocketOptions;
@@ -179,11 +181,29 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
       return new RuntimeWebSocket(url, {
         headers,
       } as unknown as string[]);
-    } catch {
-      throw new Error(
-        "This WebSocket runtime does not support custom headers. Provide webSocketFactory in Node/Lunacord options."
-      );
+    } catch (error) {
+      if (this.isHeadersUnsupportedRuntimeError(error)) {
+        throw new Error(
+          "This WebSocket runtime does not support custom headers. Provide webSocketFactory in Node/Lunacord options."
+        );
+      }
+
+      if (error instanceof Error) {
+        throw error;
+      }
+
+      throw new Error("Failed to create WebSocket", {
+        cause: error,
+      });
     }
+  }
+
+  private isHeadersUnsupportedRuntimeError(error: unknown): boolean {
+    return (
+      error instanceof Error &&
+      typeof error.message === "string" &&
+      HEADERS_UNSUPPORTED_ERROR_REGEX.test(error.message)
+    );
   }
 
   private handleMessage(raw: string | Blob | ArrayBufferLike): void {
@@ -195,7 +215,9 @@ export class Socket extends TypedEventEmitter<SocketEvents> {
       } else if (raw instanceof ArrayBuffer) {
         parsed = JSON.parse(new TextDecoder().decode(new Uint8Array(raw)));
       } else if (ArrayBuffer.isView(raw)) {
-        parsed = JSON.parse(new TextDecoder().decode(new Uint8Array(raw.buffer)));
+        parsed = JSON.parse(
+          new TextDecoder().decode(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength))
+        );
       } else if (raw instanceof Blob) {
         void raw.text().then(
           (text) => {
