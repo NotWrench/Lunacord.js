@@ -174,6 +174,31 @@ describe("Queue", () => {
     ]);
   });
 
+  it("should accept an injected RNG for deterministic shuffle", () => {
+    const queue = new Queue();
+    queue.enqueueMany([
+      Track.from(MOCK_RAW_TRACK),
+      Track.from(MOCK_RAW_TRACK_2),
+      Track.from({
+        ...MOCK_RAW_TRACK,
+        encoded: "track-3",
+        info: {
+          ...MOCK_RAW_TRACK.info,
+          identifier: "id-3",
+          title: "Track 3",
+        },
+      }),
+    ]);
+
+    queue.shuffle(() => 0);
+
+    expect(queue.toArray().map((track) => track.encoded)).toEqual([
+      "track-2",
+      "track-3",
+      "track-1",
+    ]);
+  });
+
   it("should remove duplicates by encoded track", () => {
     const queue = new Queue();
     queue.enqueueMany([

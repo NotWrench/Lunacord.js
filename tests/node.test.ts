@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock, vi } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { Node } from "../core/Node";
 import { Track } from "../structures/Track";
 import type { RawTrack } from "../types";
@@ -42,10 +42,6 @@ describe("Node", () => {
     node = new Node(NODE_OPTIONS);
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   describe("connect", () => {
     it("should resolve once the node is ready", async () => {
       node.socket.connect = mock(() => {
@@ -69,13 +65,29 @@ describe("Node", () => {
     });
 
     it("should reject when the initial connection times out", async () => {
-      vi.useFakeTimers();
+      const originalSetTimeout = globalThis.setTimeout;
+      const originalClearTimeout = globalThis.clearTimeout;
+
+      globalThis.setTimeout = ((handler: TimerHandler) => {
+        if (typeof handler === "function") {
+          queueMicrotask(() => {
+            handler();
+          });
+        }
+
+        return 1 as unknown as ReturnType<typeof setTimeout>;
+      }) as typeof setTimeout;
+
+      globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
       node.socket.connect = mock(() => {});
 
-      const connectPromise = node.connect();
-      vi.advanceTimersByTime(10_000);
-
-      await expect(connectPromise).rejects.toThrow("Timed out connecting to Lavalink");
+      try {
+        const connectPromise = node.connect();
+        await expect(connectPromise).rejects.toThrow("Timed out connecting to Lavalink");
+      } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        globalThis.clearTimeout = originalClearTimeout;
+      }
     });
 
     it("should use secure protocols when configured", async () => {
