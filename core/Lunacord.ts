@@ -628,17 +628,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     this.plugins.push(plugin);
 
     for (const node of this.getNodes()) {
-      node.rest.use({
-        beforeRequest: plugin.beforeRestRequest
-          ? (context) => plugin.beforeRestRequest?.({ ...context, node })
-          : undefined,
-        afterResponse: plugin.afterRestResponse
-          ? (context) => plugin.afterRestResponse?.({ ...context, node })
-          : undefined,
-        onError: plugin.onRestError
-          ? (context) => plugin.onRestError?.({ ...context, node })
-          : undefined,
-      });
+      this.attachNodePluginRestHooks(node, plugin);
     }
 
     this.refreshNodeSearchTransformers();
@@ -850,6 +840,9 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     this.syncAutoNodeIdCounter(node.id);
     this.bindNodeEvents(node);
     this.attachNodeRestLogging(node);
+    for (const plugin of this.plugins) {
+      this.attachNodePluginRestHooks(node, plugin);
+    }
     this.refreshNodeSearchTransformers();
 
     queueMicrotask(() => {
@@ -1242,6 +1235,20 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
           error: context.error instanceof Error ? context.error.message : String(context.error),
         });
       },
+    });
+  }
+
+  private attachNodePluginRestHooks(node: Node, plugin: LunacordPlugin): void {
+    node.rest.use({
+      beforeRequest: plugin.beforeRestRequest
+        ? (context) => plugin.beforeRestRequest?.({ ...context, node })
+        : undefined,
+      afterResponse: plugin.afterRestResponse
+        ? (context) => plugin.afterRestResponse?.({ ...context, node })
+        : undefined,
+      onError: plugin.onRestError
+        ? (context) => plugin.onRestError?.({ ...context, node })
+        : undefined,
     });
   }
 

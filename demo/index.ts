@@ -155,6 +155,18 @@ client.on("messageCreate", async (message) => {
   const getOrCreateConnectedPlayer = async (): Promise<ReturnType<Lunacord["getPlayer"]>> => {
     const existing = manager.getPlayer(guild.id);
     if (existing) {
+      if (!existing.isConnected) {
+        const voiceChannel = message.member?.voice.channel;
+        if (!voiceChannel) {
+          await message.reply("Join a voice channel first.");
+          return undefined;
+        }
+
+        existing.setTextChannel(message.channel.id);
+        await existing.connect(voiceChannel.id);
+        return existing;
+      }
+
       existing.setTextChannel(message.channel.id);
       return existing;
     }

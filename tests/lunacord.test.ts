@@ -1500,4 +1500,37 @@ describe("Lunacord", () => {
     expect(requests).toContain("/v4/loadtracks?identifier=ytsearch%3Atest");
     expect(requests).toContain("node-a:/v4/loadtracks?identifier=ytsearch%3Atest");
   });
+
+  it("should apply plugin REST hooks to nodes registered after plugin use", async () => {
+    const lunacord = new Lunacord(BASE_OPTIONS);
+    const requests: string[] = [];
+
+    lunacord.use({
+      name: "late-rest-observer",
+      beforeRestRequest: (context) => {
+        requests.push(`${context.node.id}:${context.path}`);
+      },
+    });
+
+    const node = await lunacord.addNode({
+      host: "localhost",
+      port: 2555,
+      password: "pass-c",
+      id: "node-c",
+    });
+    node.sessionId = "session-c";
+
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ loadType: "empty", data: {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    ) as unknown as typeof fetch;
+
+    await node.rest.loadTracks("ytsearch:test");
+
+    expect(requests).toContain("node-c:/v4/loadtracks?identifier=ytsearch%3Atest");
+  });
 });

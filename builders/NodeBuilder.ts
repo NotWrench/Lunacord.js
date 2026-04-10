@@ -139,7 +139,23 @@ export class NodeBuilder<TState extends NodeBuilderState> {
   }
 
   private async registerInternal(): Promise<Node> {
-    const { host, id, password, port } = this.config;
+    const { host, password, port, ...rest } = this.config;
+    const requiredConfig = this.getRequiredConfig(host, password, port, this.config.id);
+
+    const readyConfig: LunacordNodeOptions = {
+      ...rest,
+      ...requiredConfig,
+    };
+
+    return this.client.addNode(readyConfig);
+  }
+
+  private getRequiredConfig(
+    host: LunacordNodeOptions["host"] | undefined,
+    password: LunacordNodeOptions["password"] | undefined,
+    port: LunacordNodeOptions["port"] | undefined,
+    id: LunacordNodeOptions["id"]
+  ): Pick<LunacordNodeOptions, "host" | "password" | "port"> {
     const missingFields: ("host" | "password" | "port")[] = [];
 
     if (typeof host !== "string" || host.length === 0) {
@@ -166,6 +182,22 @@ export class NodeBuilder<TState extends NodeBuilderState> {
       });
     }
 
-    return this.client.addNode(this.config as LunacordNodeOptions);
+    if (typeof host !== "string" || typeof password !== "string" || typeof port !== "number") {
+      throw new InvalidNodeStateError({
+        code: "NODE_NOT_READY",
+        message: "Cannot register a node before host, port, and password are set",
+        context: {
+          missingFields: ["host", "password", "port"],
+          nodeId: id,
+          operation: "nodeBuilder.register",
+        },
+      });
+    }
+
+    return {
+      host,
+      password,
+      port,
+    };
   }
 }
