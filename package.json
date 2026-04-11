@@ -4,25 +4,25 @@
   "version": "0.1.2",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "license": "MIT",
-  "packageManager": "bun@1.3.11",
+  "packageManager": "bun@1.3.12",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc",
     "test": "bun test",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "check": "ultracite check",
     "fix": "ultracite fix",
     "prepare": "lefthook install",
-    "demo": "bun run demo/index.ts"
+    "demo": "bun run examples/basic/index.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.7",
+    "@biomejs/biome": "2.4.11",
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
     "@semantic-release/changelog": "^6.0.3",
@@ -32,12 +32,12 @@
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.0",
     "@types/bun": "latest",
-    "bun-types": "^1.3.11",
+    "bun-types": "^1.3.12",
     "discord.js": "^14.26.2",
-    "lefthook": "^2.1.4",
+    "lefthook": "^2.1.5",
     "redis": "^5.11.0",
     "semantic-release": "^25.0.3",
-    "ultracite": "7.3.2"
+    "ultracite": "7.4.4"
   },
   "peerDependencies": {
     "redis": "^5.11.0",
@@ -63,6 +63,26 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./cache": {
+      "types": "./dist/cache/index.d.ts",
+      "import": "./dist/cache/index.js",
+      "default": "./dist/cache/index.js"
+    },
+    "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
+      "import": "./dist/plugins/index.js",
+      "default": "./dist/plugins/index.js"
+    },
+    "./lyrics": {
+      "types": "./dist/integrations/lyrics/index.d.ts",
+      "import": "./dist/integrations/lyrics/index.js",
+      "default": "./dist/integrations/lyrics/index.js"
+    },
+    "./errors": {
+      "types": "./dist/errors/index.d.ts",
+      "import": "./dist/errors/index.js",
+      "default": "./dist/errors/index.js"
     }
   },
   "sideEffects": false
