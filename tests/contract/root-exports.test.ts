@@ -1,14 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import * as root from "../../src/index";
+import * as root from "lunacord.js";
 
 describe("Root exports", () => {
   it("should expose the stable high-level public API", () => {
     expect(root).toHaveProperty("Lunacord");
-    expect(root).toHaveProperty("Node");
-    expect(root).toHaveProperty("Player");
-    expect(root).toHaveProperty("Cache");
-    expect(root).toHaveProperty("PluginBuilder");
-    expect(root).toHaveProperty("SearchProvider");
-    expect(root).toHaveProperty("lavalinkSchemas");
+    expect(root).not.toHaveProperty("NodeBuilder");
+    expect(root).not.toHaveProperty("PlayerBuilder");
+    expect(root).not.toHaveProperty("PluginBuilder");
+    expect(root).not.toHaveProperty("SearchProvider");
+    expect(root).not.toHaveProperty("lavalinkSchemas");
   });
 });

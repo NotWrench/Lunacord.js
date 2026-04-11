@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import * as lyricsExports from "../../src/integrations/lyrics";
+import * as lyricsExports from "lunacord.js/lyrics";
 
 describe("Lyrics exports", () => {
   it("should expose lyrics clients from the lyrics subpath", () => {

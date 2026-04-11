@@ -64,7 +64,15 @@ export const DEFAULT_SEARCH_PROVIDER = SearchProvider.YouTube;
 export const buildSearchIdentifier = (
   query: string,
   provider: SearchProviderInput = DEFAULT_SEARCH_PROVIDER
-): string => `${provider}:${query}`;
+): string => {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    throw new Error("Search query must not be empty");
+  }
+
+  const resolvedProvider = provider ?? DEFAULT_SEARCH_PROVIDER;
+  return `${resolvedProvider}:${trimmedQuery}`;
+};
 
 export interface GeniusOptions {
   accessToken: string;

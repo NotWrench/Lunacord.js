@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import * as cacheExports from "../../src/cache";
+import * as cacheExports from "lunacord.js/cache";
 
 describe("Cache exports", () => {
   it("should expose cache entrypoints for subpath consumers", () => {

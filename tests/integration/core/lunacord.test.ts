@@ -1087,12 +1087,14 @@ describe("Lunacord", () => {
     expect(nodeA?.lyricsClient ?? nodeB?.lyricsClient).toBeDefined();
   });
 
-  it("should disconnect synchronously", () => {
+  it("should disconnect asynchronously", async () => {
     const lunacord = new Lunacord(BASE_OPTIONS);
 
     const result = lunacord.disconnect();
 
-    expect(result).toBeUndefined();
+    expect(result).toBeInstanceOf(Promise);
+
+    await expect(result).resolves.toBeUndefined();
   });
 
   it("should auto migrate players when reconnect attempts are exhausted", async () => {

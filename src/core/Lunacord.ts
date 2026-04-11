@@ -307,9 +307,9 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     this.playerNodes.delete(guildId);
   }
 
-  disconnect(): void {
-    void this.pluginManager.stopAll();
-    void this.pluginManager.disposeAll();
+  async disconnect(): Promise<void> {
+    await this.pluginManager.stopAll();
+    await this.pluginManager.disposeAll();
     for (const node of this.nodes.values()) {
       node.disconnect();
     }

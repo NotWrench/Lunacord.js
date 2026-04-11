@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import * as pluginExports from "../../src/plugins";
+import * as pluginExports from "lunacord.js/plugins";
 
 describe("Plugin exports", () => {
   it("should expose plugin types, runtime, and builtins from the plugin subpath", () => {

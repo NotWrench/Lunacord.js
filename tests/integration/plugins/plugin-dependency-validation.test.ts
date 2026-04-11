@@ -10,13 +10,21 @@ describe("Plugin dependency validation", () => {
       userId: "user-123",
     });
 
-    expect(() =>
+    try {
       lunacord.use({
         apiVersion: "1",
         dependencies: [{ name: "metrics-core", version: "1.0.0" }],
         name: "dependent-plugin",
         version: "1.0.0",
-      })
-    ).toThrow(PluginValidationError);
+      });
+      throw new Error("Expected lunacord.use to throw PluginValidationError");
+    } catch (error) {
+      expect(error).toBeInstanceOf(PluginValidationError);
+      if (!(error instanceof PluginValidationError)) {
+        return;
+      }
+
+      expect(error.code).toBe("PLUGIN_DEPENDENCY_MISSING");
+    }
   });
 });
