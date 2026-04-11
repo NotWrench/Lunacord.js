@@ -1,4 +1,9 @@
-import type { LunacordPlugin, PluginContext, PluginMetadata } from "../types";
+import {
+  LUNACORD_PLUGIN_API_VERSION,
+  type LunacordPlugin,
+  type PluginContext,
+  type PluginMetadata,
+} from "../types";
 
 export interface LoggerPluginOptions {
   includeEvents?: readonly string[];
@@ -9,7 +14,7 @@ export const createLoggerPlugin = (
   options: LoggerPluginOptions = {}
 ): LunacordPlugin => ({
   ...metadata,
-  apiVersion: "1",
+  apiVersion: LUNACORD_PLUGIN_API_VERSION,
   observe: (event, context: PluginContext) => {
     if (options.includeEvents && !options.includeEvents.includes(event.type)) {
       return;

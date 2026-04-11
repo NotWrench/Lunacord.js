@@ -1,4 +1,9 @@
-import type { LunacordPlugin, PluginContext, PluginMetadata } from "../types";
+import {
+  LUNACORD_PLUGIN_API_VERSION,
+  type LunacordPlugin,
+  type PluginContext,
+  type PluginMetadata,
+} from "../types";
 
 export const createMetricsPlugin = (
   metadata: Omit<PluginMetadata, "apiVersion">
@@ -7,7 +12,7 @@ export const createMetricsPlugin = (
 
   return {
     ...metadata,
-    apiVersion: "1",
+    apiVersion: LUNACORD_PLUGIN_API_VERSION,
     setup: (context: PluginContext) => {
       context.registerMetric({
         name: "plugin.events.observed",
