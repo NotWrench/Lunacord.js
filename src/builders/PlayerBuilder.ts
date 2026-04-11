@@ -127,6 +127,16 @@ export class PlayerBuilder<TState extends PlayerBuilderState> {
   }
 
   /**
+   * Configures how long an ended queue waits before destroying the player.
+   */
+  withQueueEndDestroyDelay(delayMs: number): PlayerBuilder<TState> {
+    return new PlayerBuilder(this.client, {
+      ...this.config,
+      queueEndDestroyDelayMs: delayMs,
+    });
+  }
+
+  /**
    * Configures the voice self-deaf flag used during connect.
    */
   withSelfDeaf(selfDeaf: boolean): PlayerBuilder<TState> {
@@ -165,6 +175,7 @@ export class PlayerBuilder<TState extends PlayerBuilderState> {
     const player = this.client.createPlayer(guildId, {
       historyMaxSize: this.config.historyMaxSize,
       onQueueEmpty: this.config.onQueueEmpty,
+      queueEndDestroyDelayMs: this.config.queueEndDestroyDelayMs,
       preferredNodeIds: this.config.preferredNodeIds,
       region: this.config.region,
     });

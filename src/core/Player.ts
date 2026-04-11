@@ -26,6 +26,7 @@ import type { VoiceConnectOptions } from "./Node";
 
 const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;
+const DEFAULT_QUEUE_END_DESTROY_DELAY_MS = 120_000;
 
 export { BASSBOOST_FILTERS, KARAOKE_FILTERS, NIGHTCORE_FILTERS, VAPORWAVE_FILTERS };
 
@@ -165,6 +166,7 @@ export interface PlayerNodeAdapter {
 export interface PlayerOptions {
   historyMaxSize?: number;
   onQueueEmpty?: (player: Player, reason: "manual" | "trackEnd") => Promise<void> | void;
+  queueEndDestroyDelayMs?: number;
 }
 
 export interface PlayerExportData {
@@ -201,6 +203,8 @@ export class Player {
   private repeatTrackEnabled = false;
   private lastStateTime = 0;
   private lastUpdateAt = 0;
+  private queueEndDestroyTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly queueEndDestroyDelayMs: number;
 
   private readonly node: PlayerNodeAdapter;
   private readonly options: PlayerOptions;
@@ -209,6 +213,7 @@ export class Player {
     this.guildId = guildId;
     this.node = node;
     this.options = options;
+    this.queueEndDestroyDelayMs = normalizeQueueEndDestroyDelay(options.queueEndDestroyDelayMs);
     this.history = new QueueHistory(options.historyMaxSize);
     this.filter = new Filter({
       guildId,
@@ -325,6 +330,7 @@ export class Player {
   }
 
   async play(track?: Track, options?: { noReplace?: boolean }): Promise<void> {
+    this.clearQueueEndDestroyTimer();
     const target = track ?? this.queue.dequeue();
     const source: "direct" | "queue" = track ? "direct" : "queue";
 
@@ -376,6 +382,7 @@ export class Player {
   }
 
   async stop(destroyPlayer = true, disconnectVoice = true): Promise<void> {
+    this.clearQueueEndDestroyTimer();
     this.current = null;
     this.position = 0;
     this.endTime = null;
@@ -529,6 +536,7 @@ export class Player {
   }
 
   add(track: Track): void {
+    this.clearQueueEndDestroyTimer();
     this.queue.enqueue(track);
     this.emitActionEvent({
       type: "playerQueueAdd",
@@ -543,6 +551,7 @@ export class Player {
       return;
     }
 
+    this.clearQueueEndDestroyTimer();
     this.queue.enqueueMany(tracks);
     this.emitActionEvent({
       type: "playerQueueAddMany",
@@ -568,6 +577,7 @@ export class Player {
   }
 
   insert(index: number, track: Track): void {
+    this.clearQueueEndDestroyTimer();
     this.queue.insert(index, track);
     this.emitActionEvent({
       type: "playerQueueInsert",
@@ -851,7 +861,12 @@ export class Player {
     return {
       historyMaxSize: this.options.historyMaxSize,
       onQueueEmpty: this.options.onQueueEmpty,
+      queueEndDestroyDelayMs: this.options.queueEndDestroyDelayMs,
     };
+  }
+
+  dispose(): void {
+    this.clearQueueEndDestroyTimer();
   }
 
   pushHistory(track: Track): void {
@@ -859,12 +874,46 @@ export class Player {
   }
 
   notifyQueueEmpty(reason: "manual" | "trackEnd"): void {
+    if (reason === "trackEnd") {
+      this.scheduleQueueEndDestroy();
+    } else {
+      this.clearQueueEndDestroyTimer();
+    }
+
     this.emitActionEvent({
       type: "playerQueueEmpty",
       guildId: this.guildId,
       reason,
     });
     void this.options.onQueueEmpty?.(this, reason);
+  }
+
+  private scheduleQueueEndDestroy(): void {
+    this.clearQueueEndDestroyTimer();
+
+    this.queueEndDestroyTimer = setTimeout(() => {
+      this.queueEndDestroyTimer = null;
+      void this.stop(true, false).catch(() => {});
+    }, this.queueEndDestroyDelayMs);
+
+    const timeoutHandle = this.queueEndDestroyTimer as unknown;
+    if (
+      typeof timeoutHandle === "object" &&
+      timeoutHandle !== null &&
+      "unref" in timeoutHandle &&
+      typeof timeoutHandle.unref === "function"
+    ) {
+      timeoutHandle.unref();
+    }
+  }
+
+  private clearQueueEndDestroyTimer(): void {
+    if (!this.queueEndDestroyTimer) {
+      return;
+    }
+
+    clearTimeout(this.queueEndDestroyTimer);
+    this.queueEndDestroyTimer = null;
   }
 }
 
@@ -875,4 +924,12 @@ const clampPosition = (positionMs: number, track: TrackType): number => {
   }
 
   return Math.min(nonNegativePosition, track.duration);
+};
+
+const normalizeQueueEndDestroyDelay = (delayMs?: number): number => {
+  if (typeof delayMs !== "number" || !Number.isFinite(delayMs)) {
+    return DEFAULT_QUEUE_END_DESTROY_DELAY_MS;
+  }
+
+  return Math.max(0, delayMs);
 };

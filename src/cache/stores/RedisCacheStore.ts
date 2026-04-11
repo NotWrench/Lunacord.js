@@ -2,9 +2,9 @@ import type { RedisClientType } from "redis";
 import type { CacheSetOptions } from "../types";
 
 export class RedisCacheStore {
-  private readonly client: RedisClientType;
+  private readonly client: RedisClientType<any, any, any, any, any>;
 
-  constructor(client: RedisClientType) {
+  constructor(client: RedisClientType<any, any, any, any, any>) {
     this.client = client;
   }
 
@@ -28,7 +28,8 @@ export class RedisCacheStore {
   }
 
   async delete(key: string): Promise<boolean> {
-    return (await this.client.del(key)) > 0;
+    const deleted = await this.client.del(key);
+    return Number(deleted) > 0;
   }
 
   async get<T>(key: string): Promise<T | null> {
@@ -37,11 +38,13 @@ export class RedisCacheStore {
       return null;
     }
 
-    return JSON.parse(value) as T;
+    const serialized = typeof value === "string" ? value : value.toString("utf8");
+    return JSON.parse(serialized) as T;
   }
 
   async has(key: string): Promise<boolean> {
-    return (await this.client.exists(key)) > 0;
+    const exists = await this.client.exists(key);
+    return Number(exists) > 0;
   }
 
   async set<T>(key: string, value: T, options?: CacheSetOptions): Promise<void> {

@@ -305,6 +305,8 @@ export class Node extends TypedEventEmitter<NodeEvents> {
       return;
     }
 
+    player.dispose();
+
     if (this.sessionId) {
       await this.rest.destroyPlayer(this.sessionId, guildId);
     }
