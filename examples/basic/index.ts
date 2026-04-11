@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits } from "discord.js";
-import { Lunacord, SearchProvider } from "../../src/index";
+import { Lunacord } from "../../src/index";
+import { SearchProvider } from "../../src/types";
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const GENIUS_CLIENT_ID = process.env.GENIUS_CLIENT_ID ?? process.env.GENIUS_API_CLIENT_ID;
