@@ -94,6 +94,7 @@ export interface CreatePlayerOptions {
   historyMaxSize?: number;
   onQueueEmpty?: (player: Player, reason: "manual" | "trackEnd") => Promise<void> | void;
   preferredNodeIds?: readonly string[];
+  queueEndDestroyDelayMs?: number;
   region?: string;
 }
 
@@ -1053,6 +1054,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
     return {
       historyMaxSize: options.historyMaxSize,
       onQueueEmpty: options.onQueueEmpty,
+      queueEndDestroyDelayMs: options.queueEndDestroyDelayMs,
     };
   }
 

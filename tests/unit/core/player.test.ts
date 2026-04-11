@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import type { TimerHandler } from "bun";
 import type { PlayerNodeAdapter } from "../../../src/core/Player";
 import { Player } from "../../../src/core/Player";
 import { Filter } from "../../../src/domain/filter/Filter";
@@ -389,6 +390,84 @@ describe("Player", () => {
         destroyPlayer: false,
         disconnectVoice: true,
       });
+    });
+  });
+
+  describe("queue end idle destroy", () => {
+    it("should destroy after the default delay when queue ends from track end", async () => {
+      const originalSetTimeout = globalThis.setTimeout;
+      const originalClearTimeout = globalThis.clearTimeout;
+      const pendingHandlers: Array<() => void> = [];
+      let scheduledDelay = 0;
+
+      globalThis.setTimeout = ((handler: TimerHandler, delay?: number) => {
+        scheduledDelay = Number(delay ?? 0);
+        if (typeof handler === "function") {
+          pendingHandlers.push(handler);
+        }
+
+        return 1 as unknown as ReturnType<typeof setTimeout>;
+      }) as typeof setTimeout;
+      globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+
+      const stopSpy = spyOn(player, "stop").mockResolvedValue();
+
+      try {
+        player.notifyQueueEmpty("trackEnd");
+
+        expect(scheduledDelay).toBe(120_000);
+        expect(stopSpy).not.toHaveBeenCalled();
+
+        pendingHandlers[0]?.();
+        await Promise.resolve();
+
+        expect(stopSpy).toHaveBeenCalledWith(true, false);
+      } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        globalThis.clearTimeout = originalClearTimeout;
+      }
+    });
+
+    it("should cancel the pending destroy when new tracks are queued", () => {
+      const originalSetTimeout = globalThis.setTimeout;
+      const originalClearTimeout = globalThis.clearTimeout;
+      const clearTimeoutMock = mock(() => {});
+
+      globalThis.setTimeout = ((_: TimerHandler) =>
+        77 as unknown as ReturnType<typeof setTimeout>) as typeof setTimeout;
+      globalThis.clearTimeout = clearTimeoutMock as typeof clearTimeout;
+
+      try {
+        player.notifyQueueEmpty("trackEnd");
+        player.add(track);
+
+        expect(clearTimeoutMock).toHaveBeenCalledWith(
+          77 as unknown as ReturnType<typeof setTimeout>
+        );
+      } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        globalThis.clearTimeout = originalClearTimeout;
+      }
+    });
+
+    it("should not schedule destroy for manual queue-empty notifications", () => {
+      const originalSetTimeout = globalThis.setTimeout;
+      const originalClearTimeout = globalThis.clearTimeout;
+      const setTimeoutMock = mock(
+        (_: TimerHandler) => 1 as unknown as ReturnType<typeof setTimeout>
+      );
+
+      globalThis.setTimeout = setTimeoutMock as typeof setTimeout;
+      globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+
+      try {
+        player.notifyQueueEmpty("manual");
+
+        expect(setTimeoutMock).not.toHaveBeenCalled();
+      } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        globalThis.clearTimeout = originalClearTimeout;
+      }
     });
   });
 
