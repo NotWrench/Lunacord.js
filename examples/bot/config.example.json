@@ -1,0 +1,21 @@
+{
+  "discord": {
+    "token": "YOUR_DISCORD_BOT_TOKEN",
+    "guildId": "YOUR_DISCORD_GUILD_ID"
+  },
+  "lavalink": {
+    "id": "demo-node",
+    "host": "localhost",
+    "port": 58232,
+    "password": "youshallnotpass",
+    "secure": false,
+    "regions": ["local"]
+  },
+  "lyrics": {
+    "genius": {
+      "clientId": "",
+      "clientSecret": "",
+      "accessToken": ""
+    }
+  }
+}
