@@ -2,6 +2,21 @@
 
 Lunacord is a manager-first Lavalink client for Bun and TypeScript. Create one `Lunacord` instance, let it manage your nodes and players, and use high-level helpers for search, queueing, filters, and lyrics.
 
+## Public entrypoints
+
+Use the root package for the stable high-level API:
+
+```ts
+import { Lunacord, SearchProvider } from "lunacord";
+```
+
+Use focused subpaths for advanced surfaces:
+
+- `lunacord/cache`
+- `lunacord/plugins`
+- `lunacord/lyrics`
+- `lunacord/errors`
+
 ## Lyrics
 
 Lyrics are fetched from `lyrics.ovh` by default. Genius is an optional fallback provider that improves coverage when `lyrics.ovh` misses or is temporarily unavailable.
