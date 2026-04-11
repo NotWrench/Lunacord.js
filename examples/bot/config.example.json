@@ -17,5 +17,13 @@
       "clientSecret": "",
       "accessToken": ""
     }
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "username": "",
+    "password": "",
+    "prefix": "lunacord:demo",
+    "defaultTtlMs": 30000
   }
 }

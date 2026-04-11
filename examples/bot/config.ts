@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { GatewayIntentBits } from "discord.js";
+import type { CacheStore } from "../../src/cache";
 import type { LunacordOptions } from "../../src/index";
 
 interface DemoConfigFile {
@@ -22,6 +23,14 @@ interface DemoConfigFile {
       clientSecret?: string;
     };
   };
+  redis?: {
+    host?: string;
+    defaultTtlMs?: number;
+    password?: string;
+    prefix?: string;
+    port?: number;
+    username?: string;
+  };
 }
 
 export interface DemoConfig {
@@ -36,6 +45,14 @@ export interface DemoConfig {
     port: number;
     regions: string[];
     secure: boolean;
+  };
+  redis: {
+    host: string;
+    defaultTtlMs?: number;
+    password?: string;
+    prefix: string;
+    port: number;
+    username?: string;
   };
 }
 
@@ -102,6 +119,15 @@ const parseRegions = (value: string | undefined): string[] | undefined => {
   return regions.length > 0 ? regions : undefined;
 };
 
+const optionalNonEmpty = (value: string | undefined): string | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
 const resolveGeniusCredentials = (
   configFile: DemoConfigFile
 ): LunacordOptions["lyrics"] | undefined => {
@@ -160,12 +186,36 @@ export const loadDemoConfig = (): DemoConfig => {
     parseBoolean(process.env.LAVALINK_SECURE) ?? configFile.lavalink?.secure ?? false;
   const nodeRegions = parseRegions(process.env.LAVALINK_REGIONS) ??
     configFile.lavalink?.regions ?? ["local"];
+  const redisHost = process.env.REDIS_HOST ?? configFile.redis?.host ?? "localhost";
+  const redisPort = parseNumber(process.env.REDIS_PORT) ?? configFile.redis?.port ?? 6379;
+  const redisDefaultTtlMs =
+    parseNumber(process.env.LUNACORD_CACHE_DEFAULT_TTL_MS) ?? configFile.redis?.defaultTtlMs;
+  const redisUsername =
+    optionalNonEmpty(process.env.REDIS_USERNAME) ?? optionalNonEmpty(configFile.redis?.username);
+  const redisPassword =
+    optionalNonEmpty(process.env.REDIS_PASSWORD) ?? optionalNonEmpty(configFile.redis?.password);
+
+  if (redisPort <= 0) {
+    throw new Error("[Config] REDIS_PORT must be greater than 0.");
+  }
+
+  if (typeof redisDefaultTtlMs === "number" && redisDefaultTtlMs <= 0) {
+    throw new Error("[Config] LUNACORD_CACHE_DEFAULT_TTL_MS must be greater than 0.");
+  }
 
   return {
     clientName: process.env.DISCORD_CLIENT_NAME ?? "LunacordDemo",
     discordGuildId,
     discordToken,
     lyrics: resolveGeniusCredentials(configFile),
+    redis: {
+      host: redisHost,
+      defaultTtlMs: redisDefaultTtlMs,
+      password: redisPassword,
+      prefix: process.env.LUNACORD_CACHE_PREFIX ?? configFile.redis?.prefix ?? "lunacord:demo",
+      port: redisPort,
+      username: redisUsername,
+    },
     node: {
       host: nodeHost,
       id: nodeId,
@@ -180,8 +230,14 @@ export const loadDemoConfig = (): DemoConfig => {
 export const createLunacordOptions = (
   config: DemoConfig,
   userId: string,
-  sendGatewayPayload: NonNullable<LunacordOptions["sendGatewayPayload"]>
+  sendGatewayPayload: NonNullable<LunacordOptions["sendGatewayPayload"]>,
+  cacheStore: CacheStore
 ): LunacordOptions => ({
+  cache: {
+    defaultTtlMs: config.redis.defaultTtlMs,
+    prefix: config.redis.prefix,
+    store: cacheStore,
+  },
   clientName: config.clientName,
   lyrics: config.lyrics,
   nodeSelection: {

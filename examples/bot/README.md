@@ -16,7 +16,8 @@ This demo is a slash-command Discord bot built on `discord.js` + `Lunacord.js`.
    - `discord.token`
    - `discord.guildId`
 2. Run Lavalink v4 (`localhost:58232`, password `youshallnotpass`) or change `lavalink` in config.
-3. Invite your Discord bot to the target guild.
+3. Run Redis (`localhost:6379`) or change `redis.host` / `redis.port` in config.
+4. Invite your Discord bot to the target guild.
 
 ## Config precedence
 
@@ -33,6 +34,12 @@ Supported environment keys:
 - `LAVALINK_PASSWORD`
 - `LAVALINK_SECURE` (`true` or `false`)
 - `LAVALINK_REGIONS` (comma-separated)
+- `REDIS_HOST`
+- `REDIS_PORT`
+- `REDIS_USERNAME`
+- `REDIS_PASSWORD`
+- `LUNACORD_CACHE_PREFIX`
+- `LUNACORD_CACHE_DEFAULT_TTL_MS` (number > 0)
 - `GENIUS_CLIENT_ID` / `GENIUS_API_CLIENT_ID`
 - `GENIUS_CLIENT_SECRET` / `GENIUS_API_CLIENT_SECRET`
 - `GENIUS_ACCESS_TOKEN` / `GENIUS_API_ACCESS_TOKEN`

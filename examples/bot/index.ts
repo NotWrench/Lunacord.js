@@ -1,4 +1,6 @@
 import { Client } from "discord.js";
+import { createClient } from "redis";
+import { RedisCacheStore } from "../../src/cache";
 import { Lunacord } from "../../src/index";
 import { createLunacordOptions, demoIntents, loadDemoConfig } from "./config";
 import { registerDiscordEvents } from "./events/discord/registerDiscordEvents";
@@ -25,20 +27,39 @@ client.once("clientReady", async () => {
     return;
   }
 
-  lunacord = new Lunacord(
-    createLunacordOptions(config, userId, (guildId, payload) => {
-      const guild = client.guilds.cache.get(guildId);
-      if (!guild) {
-        return;
-      }
-
-      guild.shard.send(payload);
-    })
-  );
-
-  registerLunacordEvents(lunacord);
+  const redisClient = createClient({
+    ...(config.redis.password ? { password: config.redis.password } : {}),
+    ...(config.redis.username ? { username: config.redis.username } : {}),
+    socket: {
+      host: config.redis.host,
+      port: config.redis.port,
+    },
+  });
+  redisClient.on("error", (error) => {
+    console.error("[Redis] Client error:", error.message);
+  });
 
   try {
+    await redisClient.connect();
+
+    lunacord = new Lunacord(
+      createLunacordOptions(
+        config,
+        userId,
+        (guildId, payload) => {
+          const guild = client.guilds.cache.get(guildId);
+          if (!guild) {
+            return;
+          }
+
+          guild.shard.send(payload);
+        },
+        new RedisCacheStore(redisClient)
+      )
+    );
+
+    registerLunacordEvents(lunacord);
+
     await lunacord
       .createNode()
       .setId(config.node.id)
@@ -52,6 +73,10 @@ client.once("clientReady", async () => {
     await lunacord.connect();
     await registerSlashCommandsForGuild(client, config.discordGuildId);
   } catch (error) {
+    if (redisClient.isOpen) {
+      await redisClient.quit();
+    }
+
     console.error(
       "[Lavalink] Failed during startup:",
       error instanceof Error ? error.message : String(error)

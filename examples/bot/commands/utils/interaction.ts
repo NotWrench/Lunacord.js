@@ -16,7 +16,13 @@ export const respond = async (
 ): Promise<void> => {
   const options = normalizePayload(payload);
 
-  if (interaction.deferred || interaction.replied) {
+  if (interaction.deferred && !interaction.replied) {
+    const { ephemeral, ...editOptions } = options;
+    await interaction.editReply(editOptions);
+    return;
+  }
+
+  if (interaction.replied) {
     await interaction.followUp(options);
     return;
   }

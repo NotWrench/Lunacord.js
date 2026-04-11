@@ -14,6 +14,10 @@ export const handleSlashCommand = async (context: CommandContext): Promise<void>
   }
 
   try {
+    if (!context.interaction.deferred && !context.interaction.replied) {
+      await context.interaction.deferReply();
+    }
+
     await command.execute(context);
   } catch (error) {
     console.error(`[Command:${context.interaction.commandName}]`, error);
