@@ -20,7 +20,6 @@
     "fix": "ultracite fix",
     "prepare": "lefthook install",
     "prepack": "bun run build",
-    "demo": "bun run examples/basic/index.ts",
     "demo:bot": "bun run examples/bot/index.ts"
   },
   "devDependencies": {
