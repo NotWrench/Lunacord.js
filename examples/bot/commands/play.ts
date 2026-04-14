@@ -6,15 +6,17 @@ import { getOrCreateConnectedPlayer } from "./utils/player";
 
 const URL_WRAPPER_REGEX = /^<(.+)>$/;
 const FALLBACK_SEARCH_PROVIDERS = [SearchProvider.YouTube, "bcsearch", SearchProvider.SoundCloud];
+const DEFAULT_LOAD_ERROR_MESSAGE = "Lavalink returned an error while loading this query.";
 
-const parseUrl = (value: string): URL | null => {
+const parseHttpUrl = (value: string): URL | null => {
   const normalizedValue = value.replace(URL_WRAPPER_REGEX, "$1").trim();
   if (!normalizedValue) {
     return null;
   }
 
   try {
-    return new URL(normalizedValue);
+    const url = new URL(normalizedValue);
+    return url.protocol === "http:" || url.protocol === "https:" ? url : null;
   } catch {
     return null;
   }
@@ -55,17 +57,18 @@ const getProviderFromUrl = (url: URL): string | null => {
 };
 
 const buildProviderSequence = (query: string): string[] => {
-  const parsedUrl = parseUrl(query);
+  const parsedUrl = parseHttpUrl(query);
   if (!parsedUrl) {
     return FALLBACK_SEARCH_PROVIDERS;
   }
 
   const detectedProvider = getProviderFromUrl(parsedUrl);
-  if (!detectedProvider) {
-    return FALLBACK_SEARCH_PROVIDERS;
-  }
+  return [detectedProvider ?? SearchProvider.YouTube];
+};
 
-  return [...new Set([detectedProvider, ...FALLBACK_SEARCH_PROVIDERS])];
+const normalizeLoadErrorMessage = (message: string | null | undefined): string | null => {
+  const trimmed = message?.trim();
+  return trimmed ? trimmed : null;
 };
 
 export const playCommand: SlashCommand = {
@@ -92,11 +95,16 @@ export const playCommand: SlashCommand = {
 
       const providersToTry = buildProviderSequence(query);
       let lastFailure: string | null = null;
+      let hadLoadError = false;
 
       for (const provider of providersToTry) {
         const result = await player.searchAndPlay(query, provider);
         if (result.loadType === "error") {
-          lastFailure = result.error.message;
+          hadLoadError = true;
+          lastFailure =
+            normalizeLoadErrorMessage(result.error.message) ??
+            normalizeLoadErrorMessage(result.error.cause) ??
+            lastFailure;
           continue;
         }
 
@@ -121,8 +129,11 @@ export const playCommand: SlashCommand = {
         return;
       }
 
-      if (lastFailure) {
-        await respond(interaction, `Failed to load track: ${lastFailure}`);
+      if (hadLoadError) {
+        await respond(
+          interaction,
+          `Failed to load track: ${lastFailure ?? DEFAULT_LOAD_ERROR_MESSAGE}`
+        );
         return;
       }
 

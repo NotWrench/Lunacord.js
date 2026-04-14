@@ -21,7 +21,12 @@ const sendToPlayerTextChannel = async (
       return;
     }
 
-    await channel.send({ content: message });
+    await channel.send({
+      allowedMentions: {
+        parse: [],
+      },
+      content: message,
+    });
   } catch (error) {
     console.warn(
       "[Discord] Failed to send player update:",
