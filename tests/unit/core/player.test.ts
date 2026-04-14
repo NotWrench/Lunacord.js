@@ -811,6 +811,113 @@ describe("Player", () => {
         },
       });
     });
+
+    it("should support custom helper methods for lavalink filter fields", async () => {
+      await player.setFilterVolume(0.8);
+      await player.setEqualizerBand(4, 0.2);
+      await player.updateTimescaleFilter({ speed: 1.1 });
+      await player.updateTremoloFilter({ depth: 0.4, frequency: 2 });
+      await player.setPluginFilter("my-plugin", { enabled: true });
+
+      expect(player.filters).toEqual({
+        equalizer: [{ band: 4, gain: 0.2 }],
+        timescale: { speed: 1.1 },
+        tremolo: { depth: 0.4, frequency: 2 },
+        volume: 0.8,
+        pluginFilters: {
+          "my-plugin": { enabled: true },
+        },
+      });
+    });
+
+    it("should compose presets and custom updates with createFilterBuilder", async () => {
+      const updatePlayer = mockNode.rest.updatePlayer;
+
+      const builder = player
+        .createFilterBuilder()
+        .setNightcore()
+        .setEqualizerBand(0, 0.22)
+        .updateChannelMix({ leftToLeft: 0.8 })
+        .setPluginFilter("fx", { enabled: true });
+
+      await builder.apply();
+
+      expect(updatePlayer).toHaveBeenCalledTimes(1);
+      expect(player.filters).toEqual({
+        channelMix: {
+          leftToLeft: 0.8,
+        },
+        equalizer: [{ band: 0, gain: 0.22 }],
+        pluginFilters: {
+          fx: { enabled: true },
+        },
+        timescale: {
+          pitch: 1.2,
+          rate: 1,
+          speed: 1.15,
+        },
+      });
+    });
+
+    it("should support plugin filter set, merge, and removal", async () => {
+      await player.setPluginFilters({
+        alpha: { enabled: true },
+      });
+
+      await player.updatePluginFilters({
+        beta: { value: 1 },
+      });
+
+      await player.removePluginFilter("alpha");
+
+      expect(player.filters.pluginFilters).toEqual({
+        beta: { value: 1 },
+      });
+
+      await player.clearPluginFilters();
+      expect(player.filters.pluginFilters).toBeUndefined();
+    });
+
+    it("should reject invalid custom filter values with basic guards", async () => {
+      await expect(player.setFilterVolume(-1)).rejects.toThrow(/filters.volume/i);
+      await expect(player.updateTimescaleFilter({ speed: 0 })).rejects.toThrow(
+        /filters.timescale.speed/i
+      );
+      await expect(player.setEqualizerBand(1.5, 0.1)).rejects.toThrow(/filters.equalizer.band/i);
+    });
+
+    it("should clear individual custom filters", async () => {
+      await player
+        .createFilterBuilder()
+        .setVolume(0.7)
+        .updateTimescale({ speed: 1.05 })
+        .setPluginFilter("fx", { value: true })
+        .setEqualizerBand(2, 0.15)
+        .apply();
+
+      await player.clearFilterVolume();
+      await player.clearTimescaleFilter();
+      await player.clearPluginFilters();
+      await player.clearEqualizer();
+
+      expect(player.filters).toEqual({});
+    });
+
+    it("should clear filters through builder clear", async () => {
+      const emitPlayerEvent = mock(() => {});
+      mockNode.emitPlayerEvent = emitPlayerEvent;
+
+      await player.setNightcore();
+      await player.createFilterBuilder().clear().apply();
+
+      expect(player.filters).toEqual({});
+
+      const eventTypes = getMockEvents(emitPlayerEvent)
+        .filter((event): event is { type: string } => typeof event === "object" && event !== null)
+        .map((event) => event.type);
+
+      expect(eventTypes).toContain("playerFiltersClear");
+    });
   });
 
   describe("queue helpers", () => {

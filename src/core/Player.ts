@@ -1,6 +1,7 @@
 import {
   BASSBOOST_FILTERS,
   Filter,
+  FilterBuilder,
   KARAOKE_FILTERS,
   NIGHTCORE_FILTERS,
   VAPORWAVE_FILTERS,
@@ -28,7 +29,7 @@ const MAX_VOLUME = 1000;
 const MIN_VOLUME = 0;
 const DEFAULT_QUEUE_END_DESTROY_DELAY_MS = 120_000;
 
-export { BASSBOOST_FILTERS, KARAOKE_FILTERS, NIGHTCORE_FILTERS, VAPORWAVE_FILTERS };
+export { BASSBOOST_FILTERS, FilterBuilder, KARAOKE_FILTERS, NIGHTCORE_FILTERS, VAPORWAVE_FILTERS };
 
 export type PlayerActionEvent =
   | {
@@ -426,12 +427,124 @@ export class Player {
     await this.filter.set(filters);
   }
 
+  createFilterBuilder(): FilterBuilder {
+    return this.filter.builder();
+  }
+
   async updateFilters(filters: Partial<Filters>): Promise<void> {
     await this.filter.update(filters);
   }
 
   async clearFilters(): Promise<void> {
     await this.filter.clear();
+  }
+
+  async setFilterVolume(volume: number): Promise<void> {
+    await this.filter.setVolume(volume);
+  }
+
+  async clearFilterVolume(): Promise<void> {
+    await this.filter.clearVolume();
+  }
+
+  async setEqualizer(equalizer: Filters["equalizer"]): Promise<void> {
+    await this.filter.setEqualizer(equalizer);
+  }
+
+  async updateEqualizer(equalizer: Filters["equalizer"]): Promise<void> {
+    await this.filter.updateEqualizer(equalizer);
+  }
+
+  async setEqualizerBand(band: number, gain: number): Promise<void> {
+    await this.filter.setEqualizerBand(band, gain);
+  }
+
+  async clearEqualizer(): Promise<void> {
+    await this.filter.clearEqualizer();
+  }
+
+  async updateKaraokeFilter(filter: Partial<NonNullable<Filters["karaoke"]>>): Promise<void> {
+    await this.filter.updateKaraoke(filter);
+  }
+
+  async clearKaraokeFilter(): Promise<void> {
+    await this.filter.clearKaraoke();
+  }
+
+  async updateTimescaleFilter(filter: Partial<NonNullable<Filters["timescale"]>>): Promise<void> {
+    await this.filter.updateTimescale(filter);
+  }
+
+  async clearTimescaleFilter(): Promise<void> {
+    await this.filter.clearTimescale();
+  }
+
+  async updateTremoloFilter(filter: Partial<NonNullable<Filters["tremolo"]>>): Promise<void> {
+    await this.filter.updateTremolo(filter);
+  }
+
+  async clearTremoloFilter(): Promise<void> {
+    await this.filter.clearTremolo();
+  }
+
+  async updateVibratoFilter(filter: Partial<NonNullable<Filters["vibrato"]>>): Promise<void> {
+    await this.filter.updateVibrato(filter);
+  }
+
+  async clearVibratoFilter(): Promise<void> {
+    await this.filter.clearVibrato();
+  }
+
+  async updateRotationFilter(filter: Partial<NonNullable<Filters["rotation"]>>): Promise<void> {
+    await this.filter.updateRotation(filter);
+  }
+
+  async clearRotationFilter(): Promise<void> {
+    await this.filter.clearRotation();
+  }
+
+  async updateDistortionFilter(filter: Partial<NonNullable<Filters["distortion"]>>): Promise<void> {
+    await this.filter.updateDistortion(filter);
+  }
+
+  async clearDistortionFilter(): Promise<void> {
+    await this.filter.clearDistortion();
+  }
+
+  async updateChannelMixFilter(filter: Partial<NonNullable<Filters["channelMix"]>>): Promise<void> {
+    await this.filter.updateChannelMix(filter);
+  }
+
+  async clearChannelMixFilter(): Promise<void> {
+    await this.filter.clearChannelMix();
+  }
+
+  async updateLowPassFilter(filter: Partial<NonNullable<Filters["lowPass"]>>): Promise<void> {
+    await this.filter.updateLowPass(filter);
+  }
+
+  async clearLowPassFilter(): Promise<void> {
+    await this.filter.clearLowPass();
+  }
+
+  async setPluginFilters(pluginFilters: Filters["pluginFilters"]): Promise<void> {
+    await this.filter.setPluginFilters(pluginFilters);
+  }
+
+  async updatePluginFilters(pluginFilters: NonNullable<Filters["pluginFilters"]>): Promise<void> {
+    await this.filter.updatePluginFilters(pluginFilters);
+  }
+
+  async setPluginFilter(name: string, value: unknown): Promise<void> {
+    await this.filter.setPluginFilter(name, value);
+  }
+
+  async removePluginFilter(name: string): Promise<void> {
+    await this.filter.removePluginFilter(name);
+  }
+
+  async clearPluginFilters(): Promise<void> {
+    await this.filter.clearPluginFilters();
   }
 
   setBassboost(): Promise<void> {

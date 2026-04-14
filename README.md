@@ -17,6 +17,51 @@ Use focused subpaths for advanced surfaces:
 - `lunacord/lyrics`
 - `lunacord/errors`
 
+## Filters
+
+Lunacord supports full Lavalink-compatible filter payloads.
+
+### Apply raw Lavalink filter payloads
+
+```ts
+await player.setFilters({
+  timescale: { speed: 1.1, pitch: 1.05 },
+  equalizer: [{ band: 0, gain: 0.15 }],
+});
+
+await player.updateFilters({
+  karaoke: { level: 1 },
+});
+```
+
+### Use typed helper methods
+
+```ts
+await player.setFilterVolume(0.85);
+await player.setEqualizerBand(2, 0.2);
+await player.updateTimescaleFilter({ speed: 1.08 });
+await player.updateDistortionFilter({ sinScale: 0.5 });
+await player.setPluginFilter("my-plugin", { enabled: true });
+```
+
+### Compose and apply once with builder
+
+```ts
+await player
+  .createFilterBuilder()
+  .setNightcore()
+  .setEqualizerBand(0, 0.2)
+  .updateChannelMix({ leftToLeft: 0.8 })
+  .setPluginFilter("fx", { enabled: true })
+  .apply();
+```
+
+Notes:
+
+- Basic client-side guards reject obviously invalid values (for example non-finite numbers, negative volumes, invalid equalizer band indexes).
+- `updateFilters` performs partial object merges; equalizer updates merge by band.
+- `clearFilters` removes every active filter. Individual clear helpers are also available.
+
 ## Lyrics
 
 Lyrics are fetched from `lyrics.ovh` by default. Genius is an optional fallback provider that improves coverage when `lyrics.ovh` misses or is temporarily unavailable.

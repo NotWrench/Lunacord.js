@@ -348,7 +348,7 @@ Core methods:
 - Search/load: `search(query, provider?)`, `searchAndPlay(query, provider?)`
 - Queue ops: `add`, `addMany`, `remove`, `insert`, `moveQueue`, `shuffleQueue`, `removeDuplicateTracks`, `clearQueue`, `getQueue`, `playNext`
 - Repeat: `repeatTrack(enabled?)`, `repeatQueue(enabled?)`
-- Filters: `setFilters`, `updateFilters`, `clearFilters`, `setBassboost`, `setNightcore`, `setVaporwave`, `setKaraoke`
+- Filters: `setFilters`, `updateFilters`, `clearFilters`, `createFilterBuilder`, `setBassboost`, `setNightcore`, `setVaporwave`, `setKaraoke`, `setFilterVolume`, `clearFilterVolume`, `setEqualizer`, `updateEqualizer`, `setEqualizerBand`, `clearEqualizer`, `updateKaraokeFilter`, `clearKaraokeFilter`, `updateTimescaleFilter`, `clearTimescaleFilter`, `updateTremoloFilter`, `clearTremoloFilter`, `updateVibratoFilter`, `clearVibratoFilter`, `updateRotationFilter`, `clearRotationFilter`, `updateDistortionFilter`, `clearDistortionFilter`, `updateChannelMixFilter`, `clearChannelMixFilter`, `updateLowPassFilter`, `clearLowPassFilter`, `setPluginFilters`, `updatePluginFilters`, `setPluginFilter`, `removePluginFilter`, `clearPluginFilters`
 - History/restore: `previous`, `rewindTrack`, `export`, `import`, `getCreationOptions`, `getRestoreState`
 - Lyrics: `getLyrics(options?)`, `getLyricsFor(track, options?)`, `getLyricsForHistory(index, options?)`, `getCurrentLyricLine(lyricsResult)`
 
@@ -383,7 +383,8 @@ Key methods/getters:
 
 - `Queue`: `enqueue`, `enqueueMany`, `dequeue`, `peek`, `insert`, `remove`, `move`, `shuffle`, `removeDuplicates`, `clear`, `toArray`, getters `size`, `isEmpty`.
 - `QueueHistory`: `push`, `pop`, `peek`, `clear`, `toArray`, getter `size`.
-- `Filter`: `set`, `update`, `clear`, `setBassboost`, `setNightcore`, `setVaporwave`, `setKaraoke`, `getPlaybackRate`, `applyLocally`, getter `value`.
+- `Filter`: `set`, `update`, `clear`, `builder`, `setBassboost`, `setNightcore`, `setVaporwave`, `setKaraoke`, `setVolume`, `clearVolume`, `setEqualizer`, `updateEqualizer`, `setEqualizerBand`, `clearEqualizer`, `updateKaraoke`, `clearKaraoke`, `updateTimescale`, `clearTimescale`, `updateTremolo`, `clearTremolo`, `updateVibrato`, `clearVibrato`, `updateRotation`, `clearRotation`, `updateDistortion`, `clearDistortion`, `updateChannelMix`, `clearChannelMix`, `updateLowPass`, `clearLowPass`, `setPluginFilters`, `updatePluginFilters`, `setPluginFilter`, `removePluginFilter`, `clearPluginFilters`, `getPlaybackRate`, `applyLocally`, getter `value`.
+- `FilterBuilder`: immutable fluent builder with `set`, `update`, `clear`, full filter-family helpers, preset helpers, getter `value`, and `apply`.
 
 ### Transport classes (advanced)
 
