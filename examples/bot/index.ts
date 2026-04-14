@@ -58,7 +58,7 @@ client.once("clientReady", async () => {
       )
     );
 
-    registerLunacordEvents(lunacord);
+    registerLunacordEvents({ client, lunacord });
 
     await lunacord
       .createNode()

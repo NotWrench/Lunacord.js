@@ -100,6 +100,17 @@ export const playCommand: SlashCommand = {
           continue;
         }
 
+        if (result.loadType === "playlist") {
+          const playlistName = result.playlistInfo.name || "Untitled playlist";
+          const trackCount = result.tracks.length;
+          const trackLabel = trackCount === 1 ? "track" : "tracks";
+          await respond(
+            interaction,
+            `Playlist loaded: **${playlistName}** (${trackCount} ${trackLabel}).`
+          );
+          return;
+        }
+
         const track = result.tracks[0];
         if (!track) {
           continue;

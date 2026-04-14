@@ -1,6 +1,39 @@
+import type { Client } from "discord.js";
 import type { Lunacord } from "../../../../src/index";
 
-export const registerLunacordEvents = (lunacord: Lunacord): void => {
+interface RegisterLunacordEventsOptions {
+  client: Client;
+  lunacord: Lunacord;
+}
+
+const sendToPlayerTextChannel = async (
+  client: Client,
+  channelId: string | null,
+  message: string
+): Promise<void> => {
+  if (!channelId) {
+    return;
+  }
+
+  try {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel || !channel.isTextBased()) {
+      return;
+    }
+
+    await channel.send({ content: message });
+  } catch (error) {
+    console.warn(
+      "[Discord] Failed to send player update:",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+};
+
+export const registerLunacordEvents = ({
+  client,
+  lunacord,
+}: RegisterLunacordEventsOptions): void => {
   lunacord
     .createPlugin("demo-observer", "1.0.0")
     .observe((event) => {
@@ -12,7 +45,10 @@ export const registerLunacordEvents = (lunacord: Lunacord): void => {
 
   lunacord.on("nodeCreate", ({ node }) => console.log(`[Lavalink] Node created: ${node.id}`));
   lunacord.on("nodeConnect", ({ node }) => console.log(`[Lavalink] Node connected: ${node.id}`));
-  lunacord.on("trackStart", ({ track }) => console.log(`[Lavalink] Playing: ${track.title}`));
+  lunacord.on("trackStart", ({ player, track }) => {
+    console.log(`[Lavalink] Playing: ${track.title}`);
+    void sendToPlayerTextChannel(client, player.textChannelId, `Now playing: **${track.title}**`);
+  });
   lunacord.on("trackEnd", ({ reason, track }) =>
     console.log(`[Lavalink] Track ended: ${track.title} (${reason})`)
   );
