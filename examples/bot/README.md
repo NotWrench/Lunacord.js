@@ -54,7 +54,7 @@ On startup, the demo auto-registers slash commands in the configured guild.
 
 ## Slash commands
 
-- `/play provider:<provider> query:<song>`
+- `/play query:<song or URL>` (provider selection is internal: URL queries auto-detect provider; text queries try ytsearch, then bcsearch, then scsearch)
 - `/skip`
 - `/repeattrack`
 - `/repeatqueue`
