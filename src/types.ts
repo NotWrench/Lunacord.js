@@ -61,6 +61,22 @@ export type SearchProviderInput = SearchProvider | string;
 
 export const DEFAULT_SEARCH_PROVIDER = SearchProvider.YouTube;
 
+const URL_WRAPPER_REGEX = /^<(.+)>$/;
+
+const parseHttpUrl = (value: string): URL | null => {
+  const normalizedValue = value.replace(URL_WRAPPER_REGEX, "$1").trim();
+  if (!normalizedValue) {
+    return null;
+  }
+
+  try {
+    const url = new URL(normalizedValue);
+    return url.protocol === "http:" || url.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+};
+
 export const buildSearchIdentifier = (
   query: string,
   provider: SearchProviderInput = DEFAULT_SEARCH_PROVIDER
@@ -70,7 +86,18 @@ export const buildSearchIdentifier = (
     throw new Error("Search query must not be empty");
   }
 
-  const resolvedProvider = provider ?? DEFAULT_SEARCH_PROVIDER;
+  const queryUrl = parseHttpUrl(trimmedQuery);
+  if (queryUrl) {
+    return queryUrl.toString();
+  }
+
+  const providerInput = provider?.trim() || DEFAULT_SEARCH_PROVIDER;
+  const providerUrl = parseHttpUrl(providerInput);
+  if (providerUrl) {
+    return providerUrl.toString();
+  }
+
+  const resolvedProvider = providerInput;
   return `${resolvedProvider}:${trimmedQuery}`;
 };
 

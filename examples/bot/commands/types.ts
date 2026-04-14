@@ -1,5 +1,15 @@
-import type { ChatInputCommandInteraction, SlashCommandBuilder } from "discord.js";
+import type {
+  ChatInputCommandInteraction,
+  SlashCommandBuilder,
+  SlashCommandOptionsOnlyBuilder,
+  SlashCommandSubcommandsOnlyBuilder,
+} from "discord.js";
 import type { Lunacord } from "../../../src/index";
+
+type SlashCommandDataBuilder =
+  | SlashCommandBuilder
+  | SlashCommandOptionsOnlyBuilder
+  | SlashCommandSubcommandsOnlyBuilder;
 
 export interface CommandContext {
   interaction: ChatInputCommandInteraction;
@@ -7,6 +17,6 @@ export interface CommandContext {
 }
 
 export interface SlashCommand {
-  data: SlashCommandBuilder;
+  data: SlashCommandDataBuilder;
   execute: (context: CommandContext) => Promise<void>;
 }
