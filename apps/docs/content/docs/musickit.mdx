@@ -1,0 +1,67 @@
+---
+title: MusicKit
+description: The batteries-included discord.js layer. Auto-wires gateway plumbing and ships a default slash command pack.
+---
+
+## What MusicKit gives you
+
+Construct a `MusicKit` and it will — *automatically* — wire everything a music bot typically does by hand:
+
+- `client.on("raw", ...)` forwarding so Lunacord sees `VOICE_STATE_UPDATE` / `VOICE_SERVER_UPDATE`.
+- `sendGatewayPayload` (`op: 4`) implementation that routes to the right shard.
+- Validation that `GatewayIntentBits.Guilds` and `GatewayIntentBits.GuildVoiceStates` are present.
+- Derives `userId` + `numShards` from the `Client` after it's ready (no manual `bindIdentity`).
+- Installs default slash commands on demand and dispatches them with a typed `CommandContext`.
+- Ephemeral error replies and a pluggable embed factory for default responses.
+
+## Minimal example
+
+```ts
+import { Client, GatewayIntentBits } from "discord.js";
+import { MusicKit } from "@lunacord/discordjs";
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+});
+
+const music = MusicKit.create(client, {
+  nodes: [{ id: "main", host: "localhost", port: 2333, password: "youshallnotpass" }],
+});
+
+await music.commands.installDefaults();
+await client.login(process.env.DISCORD_TOKEN);
+```
+
+## Options
+
+```ts
+MusicKit.create(client, {
+  nodes,                    // required
+  nodeSelection,            // optional; defaults to leastLoaded
+  resume: true,             // Lavalink session resume
+  autoMigrate: true,        // migrate players off dead nodes
+  logger: console,
+  lyrics,                   // @lunacord/lyrics provider
+  persistence,              // @lunacord/cache-redis RedisPersistenceAdapter (or a custom PersistenceAdapter)
+  autoRehydrate: true,      // automatically rehydrate players after restart when `persistence` is set
+  messages,                 // partial MessageTable overriding default strings for localization
+  embeds,                   // swap the embed factory
+  plugins: [/* @lunacord/plugins createLoggerPlugin, etc. */],
+  onReady: async (music) => { /* runs after the Discord client is ready + Lunacord is connected */ },
+});
+```
+
+## What you still do yourself
+
+- Call `await client.login(token)`.
+- Install commands (`music.commands.installDefaults()`), usually inside `onReady`.
+- Any application-specific logic — MusicKit never takes over your bot's non-music commands.
+
+## Escape hatches
+
+- `music.lunacord` — the underlying [`Lunacord`](/docs/core/lunacord) manager.
+- `music.client` — your discord.js `Client`.
+- `music.register({...})` — register an arbitrary custom command.
+- `music.commands.override("play", handler)` — replace a default.
+- `music.commands.extend("play", middleware)` — add middleware.
+- `music.buildContext(interaction)` — construct a `CommandContext` for manual dispatch.

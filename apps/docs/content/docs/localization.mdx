@@ -1,0 +1,24 @@
+---
+title: Localization
+description: Override the default reply strings and interpolate variables.
+---
+
+The default messages (in `DEFAULT_MESSAGES`) are plain English strings with `${var}` placeholders. Override any of them by passing `messages` to `MusicKit.create(...)`:
+
+```ts
+import { DEFAULT_MESSAGES, MusicKit } from "@lunacord/discordjs";
+
+const music = MusicKit.create(client, {
+  nodes,
+  messages: {
+    ...DEFAULT_MESSAGES,
+    nowPlaying: "🎧 Lecture: **${title}**",
+    paused: "Pause ⏸",
+    joinVoiceFirst: "Rejoins un salon vocal d'abord.",
+  },
+});
+```
+
+Message keys are typed — TypeScript will autocomplete the valid names.
+
+For multi-locale handling, build a `MessageTable` per locale and swap the MusicKit's `messages` at runtime based on interaction locale (`ctx.interaction.locale`).

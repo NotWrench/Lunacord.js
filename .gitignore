@@ -1,21 +1,23 @@
-# dependencies (bun install)
+# dependencies
 node_modules
 
-# output
-out
+# build output
 dist
+out
+.next
+.turbo
 *.tgz
+*.tsbuildinfo
 
-# code coverage
+# coverage
 coverage
 *.lcov
 
 # logs
 logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+*.log
 
-# dotenv environment variable files
+# dotenv
 .env
 .env.development.local
 .env.test.local
@@ -23,15 +25,19 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.local
 
 # bot demo local config
+apps/example-bot/config.json
 examples/bot/config.json
 
 # caches
 .eslintcache
 .cache
-*.tsbuildinfo
 
-# IntelliJ based IDEs
+# IDE
 .idea
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 
-# Finder (MacOS) folder config
+# OS
 .DS_Store
+Thumbs.db

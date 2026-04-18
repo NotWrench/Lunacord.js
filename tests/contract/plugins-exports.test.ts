@@ -1,12 +1,17 @@
 import { describe, expect, it } from "bun:test";
-import * as pluginExports from "lunacord.js/plugins";
+import * as plugins from "@lunacord/plugins";
 
-describe("Plugin exports", () => {
-  it("should expose plugin types, runtime, and builtins from the plugin subpath", () => {
-    expect(pluginExports).toHaveProperty("PluginBuilder");
-    expect(pluginExports).toHaveProperty("PluginManager");
-    expect(pluginExports).toHaveProperty("createLoggerPlugin");
-    expect(pluginExports).toHaveProperty("createMetricsPlugin");
-    expect(pluginExports).toHaveProperty("LUNACORD_PLUGIN_API_VERSION");
+describe("@lunacord/plugins public API", () => {
+  it("re-exports plugin primitives from core", () => {
+    expect(plugins).toHaveProperty("LUNACORD_PLUGIN_API_VERSION");
+    expect(plugins).toHaveProperty("PluginBuilder");
+  });
+
+  it("exposes all builtins", () => {
+    expect(plugins).toHaveProperty("createLoggerPlugin");
+    expect(plugins).toHaveProperty("createMetricsPlugin");
+    expect(plugins).toHaveProperty("createDebugPlugin");
+    expect(plugins).toHaveProperty("createAutoplayPlugin");
+    expect(plugins).toHaveProperty("createStatsReporterPlugin");
   });
 });

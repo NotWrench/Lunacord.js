@@ -1,0 +1,49 @@
+---
+title: Persistence
+description: Snapshot player state so bots can rehydrate after restarts.
+---
+
+`Lunacord` exposes an optional `PersistenceAdapter` slot. When present, the manager snapshots every player automatically on key events (`playerCreate`, `playerPlay`, `trackStart`, `trackEnd`) and deletes the snapshot on `playerDestroy`.
+
+```ts
+import { MemoryPersistenceAdapter, Lunacord } from "@lunacord/core";
+
+const lunacord = Lunacord.create()
+  .userId("bot-id")
+  .shards(1)
+  .persistence(new MemoryPersistenceAdapter())
+  .build();
+
+await lunacord.connect();
+await lunacord.rehydrate(); // reads every stored guild snapshot and recreates players
+```
+
+## Redis-backed (production)
+
+```ts
+import { createClient } from "redis";
+import { RedisPersistenceAdapter } from "@lunacord/cache-redis";
+
+const redis = createClient({ url: "redis://localhost:6379" });
+await redis.connect();
+
+const adapter = new RedisPersistenceAdapter(redis, { prefix: "lunacord:player" });
+lunacord.persistence(adapter);
+```
+
+With MusicKit, pass `persistence` in options and set `autoRehydrate: true` (default when persistence is set). After the Discord client is ready, MusicKit will call `connect()` and then `rehydrate()` automatically.
+
+## Custom adapter
+
+Implement the interface:
+
+```ts
+interface PersistenceAdapter {
+  save(guildId: string, snapshot: PlayerPersistenceSnapshot): Promise<void> | void;
+  load(guildId: string): Promise<PlayerPersistenceSnapshot | undefined>;
+  delete(guildId: string): Promise<void> | void;
+  list(): Promise<readonly string[]> | readonly string[];
+}
+```
+
+Then install with `lunacord.persistence(yourAdapter)`.

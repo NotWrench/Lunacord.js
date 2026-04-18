@@ -1,0 +1,69 @@
+---
+title: Recipes
+description: Copy-paste-ready patterns for common music bot features.
+---
+
+## Role-gate /skip
+
+```ts
+music.commands.extend("skip", async (ctx, next) => {
+  const member = ctx.interaction.member;
+  if (!member || !("permissions" in member)) return ctx.error("Members only.");
+  const hasRole = member.roles.cache.some((r) => r.name === "DJ");
+  if (!hasRole) return ctx.error("DJ role required.");
+  return next();
+});
+```
+
+## Persist + rehydrate
+
+```ts
+const music = MusicKit.create(client, {
+  nodes,
+  persistence: new RedisPersistenceAdapter(redis),
+  // autoRehydrate is on by default when persistence is set
+});
+```
+
+## Shared autoplay
+
+```ts
+lunacord.use(
+  createAutoplayPlugin(
+    { name: "autoplay", version: "1.0.0" },
+    {
+      next: async ({ lastTrack }) =>
+        lastTrack ? `${lastTrack.author} mix` : "lofi hip hop",
+      searchProvider: "ytmsearch",
+    }
+  )
+);
+```
+
+## Brand the embeds
+
+```ts
+MusicKit.create(client, {
+  nodes,
+  embeds: {
+    ...defaultEmbedFactory,
+    nowPlaying(player) {
+      return new EmbedBuilder().setTitle(player.current?.title ?? "—").setColor(0xff69b4);
+    },
+  },
+});
+```
+
+## Deploy slash commands to one guild for testing
+
+```ts
+await music.commands.installDefaults({ scope: "guild", guildId: process.env.GUILD_ID });
+```
+
+## Subscribe to the unified debug event
+
+```ts
+music.lunacord.on("debug", ({ scope, message, data, nodeId }) => {
+  console.log(`[${scope}${nodeId ? `:${nodeId}` : ""}] ${message}`, data ?? "");
+});
+```

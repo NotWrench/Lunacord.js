@@ -1,11 +1,16 @@
 import { describe, expect, it } from "bun:test";
-import * as lyricsExports from "lunacord.js/lyrics";
+import * as lyrics from "@lunacord/lyrics";
 
-describe("Lyrics exports", () => {
-  it("should expose lyrics clients from the lyrics subpath", () => {
-    expect(lyricsExports).toHaveProperty("LyricsClient");
-    expect(lyricsExports).toHaveProperty("LyricsOvhClient");
-    expect(lyricsExports).toHaveProperty("GeniusClient");
-    expect(lyricsExports).toHaveProperty("GeniusOAuthHelper");
+describe("@lunacord/lyrics public API", () => {
+  it("exposes the LyricsClient + fluent builder", () => {
+    expect(lyrics).toHaveProperty("LyricsClient");
+    expect(lyrics).toHaveProperty("LyricsBuilder");
+    expect(typeof lyrics.LyricsClient.create).toBe("function");
+  });
+
+  it("exposes every provider", () => {
+    expect(lyrics).toHaveProperty("GeniusClient");
+    expect(lyrics).toHaveProperty("GeniusOAuthHelper");
+    expect(lyrics).toHaveProperty("LyricsOvhClient");
   });
 });

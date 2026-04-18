@@ -1,0 +1,28 @@
+---
+title: Embeds
+description: Customize the default music embed factory or replace it entirely.
+---
+
+The default factory produces rich embeds for `nowPlaying`, `queue`, `trackQueued`, `playlistLoaded`, and `stats`. Override the entire factory via MusicKit options:
+
+```ts
+import { defaultEmbedFactory, MusicKit, type MusicEmbedFactory } from "@lunacord/discordjs";
+import { EmbedBuilder } from "discord.js";
+
+const customEmbeds: MusicEmbedFactory = {
+  ...defaultEmbedFactory,
+  nowPlaying(player) {
+    return new EmbedBuilder()
+      .setTitle(player.current?.title ?? "—")
+      .setDescription("Custom styling")
+      .setColor(0x00ff88);
+  },
+};
+
+const music = MusicKit.create(client, {
+  nodes,
+  embeds: customEmbeds,
+});
+```
+
+Embeds are called from default commands (`/queue`, `/nowplaying`, etc.) — overriding the factory is the cleanest way to brand the bot without rewriting every handler.

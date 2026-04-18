@@ -1,21 +1,12 @@
 {
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "lib": ["ESNext"],
-    "types": ["bun-types"],
-    "outDir": "dist",
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
-    "noFallthroughCasesInSwitch": true
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules", "examples", "tests"]
+  "extends": "./tsconfig.base.json",
+  "include": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/plugins" },
+    { "path": "./packages/lyrics" },
+    { "path": "./packages/cache-redis" },
+    { "path": "./packages/discordjs" },
+    { "path": "./packages/test-utils" }
+  ]
 }

@@ -1,0 +1,40 @@
+---
+title: Introduction
+description: Builder-first Lavalink v4 client for Bun and Node.js, shipped as a family of @lunacord/* packages.
+---
+
+## What is Lunacord?
+
+**Lunacord** is a music layer for Discord bots. It talks to a [Lavalink v4](https://lavalink.dev) server, manages nodes, players, queues, filters, and lyrics, and ships a **batteries-included** discord.js integration so the average music bot ends up being about 15 lines of code.
+
+## The packages
+
+- **`@lunacord/core`** — the Lavalink manager (`Lunacord`), nodes, players, queue, filter builder, cache, persistence interface, plugin runtime, errors, Zod schemas.
+- **`@lunacord/discordjs`** — `MusicKit`: auto-wires raw packet forwarding, op:4 voice sends, intent validation, `userId` / `numShards` binding, a default 18-command slash pack, middleware, and embed factory.
+- **`@lunacord/plugins`** — `PluginBuilder`, `PluginManager`, and builtins: logger, metrics, debug, autoplay, stats reporter.
+- **`@lunacord/lyrics`** — `LyricsClient` with Lyrics.ovh and Genius providers (plus a Genius OAuth helper).
+- **`@lunacord/cache-redis`** — `RedisCacheStore` and `RedisPersistenceAdapter`.
+
+## Why builder-first?
+
+Every public API has an explicit, fluent builder:
+
+```ts
+import { Lunacord } from "@lunacord/core";
+
+const lunacord = Lunacord.create()
+  .userId("bot-id")
+  .shards(1)
+  .node({ id: "main", host: "localhost", port: 2333, password: "..." })
+  .nodeSelection.leastLoaded()
+  .resume(true)
+  .build();
+```
+
+Type-state builders make impossible states unrepresentable at compile time (you can't call `.register()` on a `NodeBuilder` until `setHost`, `setPort`, and `setPassword` have been called).
+
+## Three ways to use Lunacord
+
+1. **Batteries-included (recommended)** — use [`MusicKit`](/docs/musickit) and get a working bot in minutes.
+2. **Just the core manager** — use `Lunacord` directly, wire Discord yourself.
+3. **Custom plugins / providers** — compose your own via the plugin and persistence interfaces.

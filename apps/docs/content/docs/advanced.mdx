@@ -1,0 +1,52 @@
+---
+title: Advanced — raw REST/WS, migration, resume
+---
+
+## Raw REST
+
+Every node exposes `node.rest`, a typed Lavalink REST client with middleware support.
+
+```ts
+const info = await node.rest.getInfo();
+const players = await node.rest.getPlayers(node.sessionId!);
+
+node.rest.use({
+  beforeRequest: (ctx) => ({ headers: { "X-Trace": "1" } }),
+  afterResponse: (ctx) => { /* inspect body */ },
+  onError: (ctx) => { /* alert */ },
+});
+```
+
+## Raw WebSocket
+
+`node.socket` emits `ready`, `playerUpdate`, `stats`, `event`, `close`, `reconnecting`, `reconnectFailed`, `error`. Most apps should use the aggregated `lunacord.on("debug", ...)` + typed events instead.
+
+## WebSocket runtimes without header support
+
+Edge runtimes or browsers without `Authorization`-header-capable `WebSocket`? Provide a `webSocketFactory`:
+
+```ts
+Lunacord.create()
+  .webSocketFactory(({ url, headers }) => new MyCustomWsClient(url, { headers }))
+  .build();
+```
+
+## Manual migration
+
+```ts
+await lunacord.movePlayer(guildId, "backup-node");
+```
+
+The migration snapshots the source player via `player.export()`, copies the voice-state snapshot to the target node, creates a new player there, and re-applies state via REST. `playerMigrate` / `playerMigrationFailed` events track the outcome.
+
+## Lavalink session resume
+
+```ts
+Lunacord.create().resume(true, 60).build();
+```
+
+After a WS `ready`, Lunacord PATCHes `updateSession(sessionId, true, timeout)` so Lavalink keeps players alive during brief disconnects.
+
+## Escape hatch: custom everything
+
+Both the `Lunacord` constructor and builder expose every option. Dropping down is supported — all the builder-first conveniences are opt-in.
