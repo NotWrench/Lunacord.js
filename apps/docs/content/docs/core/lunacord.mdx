@@ -1,0 +1,84 @@
+---
+title: Lunacord
+description: The central manager. Owns nodes, players, events, plugins, cache, persistence, and the debug channel.
+---
+
+## Construct
+
+Builder-first (recommended):
+
+```ts
+import { Lunacord } from "@lunacord/core";
+
+const lunacord = Lunacord.create()
+  .userId("bot-id")
+  .shards(1)
+  .node({ id: "main", host: "localhost", port: 2333, password: "..." })
+  .nodeSelection.leastLoaded()
+  .resume(true)
+  .build();
+```
+
+`userId` and `numShards` are optional at build time — adapters (like `MusicKit`) call `lunacord.bindIdentity({ userId, numShards })` after the Discord client is ready.
+
+## Key methods
+
+```ts
+lunacord.bindIdentity({ userId, numShards });
+lunacord.lyrics(provider);        // install a LyricsProvider
+lunacord.persistence(adapter);    // install a PersistenceAdapter
+await lunacord.connect();
+await lunacord.rehydrate();       // restore players from persistence
+
+const player = lunacord
+  .createPlayer()
+  .setGuild(guildId)
+  .setVoiceChannel(channelId)
+  .setTextChannel(channelId)
+  .connect();
+
+const stats = lunacord.getStats();    // aggregated across all nodes
+await lunacord.movePlayer(guildId, targetNodeId);
+await lunacord.destroyPlayer(guildId);
+await lunacord.disconnect();
+```
+
+## Events (typed)
+
+Every event is typed on the emitter. Listen with `lunacord.on("eventName", handler)`. Key ones:
+
+- **Node lifecycle**: `nodeCreate`, `nodeConnect`, `nodeDisconnect`, `nodeReconnecting`, `nodeReconnectFailed`, `nodeRemove`, `nodeStats`, `nodeError`, `nodeVoiceSocketClosed`.
+- **Player lifecycle**: `playerCreate`, `playerDestroy`, `playerConnect`, `playerDisconnect`, `playerMigrate`, `playerMigrationFailed`.
+- **Queue & playback**: `playerQueueAdd`, `playerQueueAddMany`, `playerQueueEmpty`, `playerQueueShuffle`, `playerPlay`, `playerPause`, `playerResume`, `playerStop`, `playerSkip`, `playerSeek`, `playerVolumeUpdate`.
+- **Track events**: `trackStart`, `trackEnd`, `trackException`, `trackStuck`.
+- **Filters**: `playerFiltersUpdate`, `playerFiltersClear`.
+- **Unified**: `debug` — a single firehose of `{ scope, message, data?, nodeId? }` for nodes, WS, REST, plugins, players.
+- **Plugins**: `pluginError`.
+
+## Unified debug event
+
+```ts
+lunacord.on("debug", ({ scope, message, data, nodeId }) => {
+  console.log(`[${scope}${nodeId ? `:${nodeId}` : ""}] ${message}`, data ?? "");
+});
+```
+
+Every internal log (WS reconnects, REST requests, voice packet sync, plugin hooks, manager internals) is emitted here. You no longer need handlers for every event kind just to observe what's happening.
+
+## Node selection
+
+Strategies:
+
+- `leastLoaded` — minimum `playerCount` (default).
+- `roundRobin`
+- `weighted` — score from `playerCount`, `cpu.lavalinkLoad`, memory ratio.
+- `region` — pick nodes whose `regions` include `options.region`, then fall back.
+- `failover` — pick first id in `order`.
+
+Switch via the builder:
+
+```ts
+Lunacord.create()
+  .nodeSelection.weighted({ cpuWeight: 100, memoryWeight: 25, playerWeight: 1 })
+  .build();
+```

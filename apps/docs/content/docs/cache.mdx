@@ -1,0 +1,50 @@
+---
+title: Cache
+description: Memory, noop, and Redis cache stores.
+---
+
+Lunacord ships a small, pluggable `CacheStore` contract. The manager creates namespaces — plugins, the lyrics layer, etc., all get isolated keyspaces.
+
+```ts
+import { CacheManager, MemoryCacheStore } from "@lunacord/core";
+
+const manager = new CacheManager({
+  enabled: true,
+  defaultTtlMs: 30_000,
+  prefix: "lunacord",
+  memory: { cleanupIntervalMs: 60_000 },
+});
+
+const pluginCache = manager.cache("plugin:foo");
+await pluginCache.set("key", { value: 42 }, { ttlMs: 10_000 });
+```
+
+## Redis
+
+```ts
+import { createClient } from "redis";
+import { RedisCache, RedisCacheStore } from "@lunacord/cache-redis";
+
+const redis = createClient({ url: "redis://localhost:6379" });
+await redis.connect();
+
+// Builder form:
+const store = RedisCache.from(redis).build();
+
+// Or direct:
+const store2 = new RedisCacheStore(redis);
+
+const lunacord = Lunacord.create()
+  .cache.custom({ enabled: true, prefix: "lunacord", store })
+  .build();
+```
+
+`RedisCacheStore.clear(prefix)` **requires a prefix** — this is intentional, to prevent accidental `FLUSHALL`-like wipes.
+
+## Noop
+
+Disable caching without changing code paths:
+
+```ts
+Lunacord.create().cache.disabled().build();
+```

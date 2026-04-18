@@ -1,0 +1,29 @@
+{
+  "name": "@lunacord/example-bot",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Runnable discord.js music bot demo using @lunacord/discordjs MusicKit.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo",
+    "lint": "biome lint src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lunacord/cache-redis": "workspace:*",
+    "@lunacord/core": "workspace:*",
+    "@lunacord/discordjs": "workspace:*",
+    "@lunacord/lyrics": "workspace:*",
+    "@lunacord/plugins": "workspace:*",
+    "discord.js": "^14.26.2",
+    "redis": "^5.11.0"
+  },
+  "devDependencies": {
+    "@lunacord/tsconfig": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "^5.7.3"
+  }
+}

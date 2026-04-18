@@ -1,0 +1,53 @@
+{
+  "name": "@lunacord/cache-redis",
+  "version": "1.0.0-alpha.0",
+  "description": "Redis cache store for Lunacord (via `redis` client).",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist .turbo",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "lint": "biome lint src",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@lunacord/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@lunacord/tsconfig": "workspace:*",
+    "@types/bun": "latest",
+    "redis": "^5.11.0",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "redis": "^5.11.0",
+    "typescript": "^5"
+  },
+  "engines": {
+    "bun": ">=1.3.0",
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NotWrench/Lunacord.js",
+    "directory": "packages/cache-redis"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

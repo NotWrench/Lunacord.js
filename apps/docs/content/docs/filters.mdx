@@ -1,0 +1,48 @@
+---
+title: Filters & Presets
+description: Equalizer, timescale, karaoke, rotation, distortion, channel mix, low-pass, tremolo, vibrato, and plugin filters.
+---
+
+Every player exposes a `filter` instance and a `createFilterBuilder()` shortcut. The four built-in presets map directly to named setters on the player:
+
+```ts
+await player.setBassboost();
+await player.setNightcore();
+await player.setVaporwave();
+await player.setKaraoke();
+await player.clearFilters();
+```
+
+## Fluent filter builder
+
+```ts
+await player
+  .createFilterBuilder()
+  .setEqualizer([
+    { band: 0, gain: 0.15 },
+    { band: 1, gain: 0.125 },
+    { band: 2, gain: 0.1 },
+  ])
+  .updateTimescale({ speed: 1.15, pitch: 1.2 })
+  .updateLowPass({ smoothing: 20 })
+  .apply();
+```
+
+## Individual setters
+
+`Player` exposes typed setters for every filter family:
+
+- `setFilters(filters)` / `updateFilters(patch)` / `clearFilters()`
+- `setEqualizer`, `updateEqualizer`, `setEqualizerBand`, `clearEqualizer`
+- `updateKaraokeFilter`, `clearKaraokeFilter`
+- `updateTimescaleFilter`, `clearTimescaleFilter`
+- `updateTremoloFilter`, `clearTremoloFilter`
+- `updateVibratoFilter`, `clearVibratoFilter`
+- `updateRotationFilter`, `clearRotationFilter`
+- `updateDistortionFilter`, `clearDistortionFilter`
+- `updateChannelMixFilter`, `clearChannelMixFilter`
+- `updateLowPassFilter`, `clearLowPassFilter`
+- `setPluginFilters`, `updatePluginFilters`, `setPluginFilter`, `removePluginFilter`, `clearPluginFilters`
+- `setFilterVolume`, `clearFilterVolume`
+
+All filter mutations validate against the Zod schemas in `@lunacord/core/schemas` before hitting Lavalink.

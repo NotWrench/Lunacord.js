@@ -1,0 +1,23 @@
+{
+  "name": "@lunacord/contract-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "lint": "biome lint contract",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lunacord/cache-redis": "workspace:*",
+    "@lunacord/core": "workspace:*",
+    "@lunacord/discordjs": "workspace:*",
+    "@lunacord/lyrics": "workspace:*",
+    "@lunacord/plugins": "workspace:*"
+  },
+  "devDependencies": {
+    "@lunacord/tsconfig": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,76 @@
+---
+title: Plugins
+description: Plugin runtime, builtins, and authoring.
+---
+
+`@lunacord/plugins` re-exports everything needed to author Lunacord plugins plus ships five useful builtins. Plugins are validated, versioned (`apiVersion: "1" | "2"`), and timeout-bounded (per-hook defaults: 5 s for lifecycle, 2 s for runtime hooks).
+
+## Builtins
+
+```ts
+import {
+  createAutoplayPlugin,
+  createDebugPlugin,
+  createLoggerPlugin,
+  createMetricsPlugin,
+  createStatsReporterPlugin,
+} from "@lunacord/plugins";
+
+lunacord.use(createLoggerPlugin({ name: "observer", version: "1.0.0" }));
+lunacord.use(createDebugPlugin({ name: "debug", version: "1.0.0" }));
+lunacord.use(createMetricsPlugin({ name: "metrics", version: "1.0.0" }));
+
+lunacord.use(
+  createStatsReporterPlugin(
+    { name: "reporter", version: "1.0.0" },
+    { intervalMs: 60_000, getStats: () => lunacord.getStats(), report: (stats) => pushToDatadog(stats) }
+  )
+);
+
+lunacord.use(
+  createAutoplayPlugin(
+    { name: "autoplay", version: "1.0.0" },
+    { next: async (ctx) => `recommendation for ${ctx.lastTrack?.title}` }
+  )
+);
+```
+
+## Author your own
+
+```ts
+import { LUNACORD_PLUGIN_API_VERSION, PluginBuilder } from "@lunacord/plugins";
+
+const myPlugin = new PluginBuilder(lunacord, {
+    name: "my-plugin",
+    version: "1.0.0",
+    apiVersion: LUNACORD_PLUGIN_API_VERSION,
+  })
+  .dependsOn("observer")
+  .setup((ctx) => ctx.logger.debug("plugin ready"))
+  .observe((event, ctx) => { /* every LunacordPluginEvent */ })
+  .beforeRestRequest((context) => ({ headers: { "X-Trace": "1" } }))
+  .afterRestResponse((context) => { /* inspect/transform response */ })
+  .transformSearchResult((context, result) => result) // rewrite search loads
+  .onPlayerRestore((context) => { /* after persistence rehydrate (API v2+) */ })
+  .build();
+
+lunacord.use(myPlugin);
+```
+
+## Hooks
+
+| Hook | When |
+|------|------|
+| `setup` | Before nodes connect |
+| `start` | After first node is ready |
+| `stop` / `dispose` | Teardown |
+| `observe` | Every typed event (player, node, track, queue, plugin, …) |
+| `beforeRestRequest` | Mutate REST requests |
+| `afterRestResponse` | Observe/transform REST responses |
+| `onRestError` | Notified on REST errors |
+| `transformSearchResult` | Rewrite search loads (e.g. Spotify → YouTube) |
+| `onPlayerRestore` *(v2+)* | Called after the persistence layer rehydrates a guild's player |
+
+## API version 2
+
+Lunacord v1.0 ships plugin API v2. Plugins declaring `apiVersion: "1"` still work — a deprecation warning is logged, and v1 support will be removed in the next major.

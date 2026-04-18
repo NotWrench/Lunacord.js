@@ -1,0 +1,8 @@
+{
+  "extends": "@lunacord/tsconfig/app.json",
+  "compilerOptions": {
+    "types": ["node", "bun"],
+    "moduleResolution": "bundler"
+  },
+  "include": ["contract/**/*.ts"]
+}

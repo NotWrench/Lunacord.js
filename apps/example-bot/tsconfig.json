@@ -1,0 +1,9 @@
+{
+  "extends": "@lunacord/tsconfig/app.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": false
+  },
+  "include": ["src/**/*.ts"]
+}

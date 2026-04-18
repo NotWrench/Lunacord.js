@@ -1,0 +1,61 @@
+{
+  "name": "@lunacord/discordjs",
+  "version": "1.0.0-alpha.0",
+  "description": "Batteries-included discord.js adapter + MusicKit for Lunacord. Auto-wires gateway, voice, intents, interactions, and ships a slash command pack.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./commands": {
+      "types": "./dist/commands/index.d.ts",
+      "import": "./dist/commands/index.js"
+    },
+    "./embeds": {
+      "types": "./dist/embeds/index.d.ts",
+      "import": "./dist/embeds/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist .turbo",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "lint": "biome lint src",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@lunacord/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@lunacord/tsconfig": "workspace:*",
+    "@types/bun": "latest",
+    "discord.js": "^14.26.2",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "discord.js": "^14.0.0",
+    "typescript": "^5"
+  },
+  "engines": {
+    "bun": ">=1.3.0",
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NotWrench/Lunacord.js",
+    "directory": "packages/discordjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

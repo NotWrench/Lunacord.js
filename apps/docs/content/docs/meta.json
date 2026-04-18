@@ -1,0 +1,27 @@
+{
+  "title": "Docs",
+  "pages": [
+    "index",
+    "quickstart",
+    "---MusicKit---",
+    "musickit",
+    "commands",
+    "embeds",
+    "localization",
+    "---Core---",
+    "core/lunacord",
+    "core/node",
+    "core/player",
+    "builders",
+    "filters",
+    "---Platform features---",
+    "plugins",
+    "cache",
+    "persistence",
+    "lyrics",
+    "---Reference---",
+    "advanced",
+    "recipes",
+    "migration"
+  ]
+}

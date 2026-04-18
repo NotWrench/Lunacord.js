@@ -1,0 +1,83 @@
+---
+title: Player
+description: Per-guild playback, queue, filter, history, lyrics, and voice state.
+---
+
+## Player builder
+
+```ts
+const player = await lunacord
+  .createPlayer()
+  .setGuild(guildId)
+  .setVoiceChannel(voiceChannelId)
+  .setTextChannel(textChannelId)
+  .preferRegion("us-east")
+  .preferNodes(["main", "backup"])
+  .withHistoryLimit(20)
+  .onQueueEmpty(async (player, reason) => {
+    // Called whenever the queue is empty. `reason` is "manual" or "trackEnd".
+  })
+  .withQueueEndDestroyDelay(120_000)  // ms before auto-cleanup (default 120s)
+  .connect();
+```
+
+## Playback
+
+```ts
+await player.play(track?, { noReplace?: boolean });
+await player.pause(true);
+await player.pause(false);
+await player.stop();          // defaults: destroyPlayer=true, disconnectVoice=true
+await player.skip();
+await player.seek(30_000);
+await player.setEndTime(60_000);
+await player.setVolume(250);   // clamped 0–1000
+```
+
+## Search + play
+
+```ts
+const result = await player.search("ytsearch:daft punk harder", "ytsearch");
+if (result.loadType === "playlist") {
+  await player.addMany(result.tracks);
+} else if (result.loadType === "search" || result.loadType === "track") {
+  await player.play(result.tracks[0]);
+}
+
+// Or shortcut:
+await player.searchAndPlay("https://youtu.be/...");
+```
+
+Smart URL detection lives on the root export too (`buildProviderSequence`, `detectProviderFromUrl`, `SearchProvider`). `MusicKit`'s `/play` command already uses them.
+
+## Queue
+
+```ts
+player.add(track);
+player.addMany(tracks);
+player.insert(0, track);
+player.remove(2);
+player.moveQueue(0, 3);
+player.shuffleQueue();
+player.removeDuplicateTracks();
+player.clearQueue();
+player.getQueue();      // array
+```
+
+## History + previous
+
+```ts
+const previous = await player.previous();
+await player.rewindTrack();
+```
+
+## Repeat modes (mutually exclusive)
+
+```ts
+player.repeatTrack(true);     // auto-disables repeatQueue
+player.repeatQueue(true);     // auto-disables repeatTrack
+```
+
+## Filters
+
+See [Filters](/docs/filters) for the filter builder and presets.

@@ -1,0 +1,41 @@
+---
+title: Node
+description: A single Lavalink connection. REST + WebSocket, voice state sync, per-guild players.
+---
+
+Each `Node` owns one Lavalink connection — a REST client (`node.rest`) and a WebSocket (`node.socket`). `Lunacord` multiplexes players across all registered nodes.
+
+## Create
+
+Builder-first:
+
+```ts
+await lunacord
+  .createNode()
+  .setId("main")
+  .setHost("localhost")
+  .setPort(2333)
+  .setPassword("youshallnotpass")
+  .setSecure(false)
+  .setRegions(["us-east"])
+  .setReconnectPolicy({ initialDelayMs: 1000, maxAttempts: 5, maxDelayMs: 30_000 })
+  .setRequestPolicy({ retryAttempts: 1, retryDelayMs: 250, timeoutMs: 10_000 })
+  .register();
+
+await lunacord.connect();
+```
+
+The type-state ensures `register()` is only callable once `host`, `port`, and `password` have been set.
+
+## Remove / migrate
+
+```ts
+await lunacord.removeNode("main"); // drains players to another node, then disconnects
+
+// Manual migration between nodes (snapshot → restore)
+await lunacord.movePlayer(guildId, "backup-node");
+```
+
+## Auto-migrate on reconnect-failed
+
+`autoMigrate(true)` (or `{ preferredNodeIds }`) hooks `nodeReconnectFailed` and migrates every player off the dead node to the healthiest alternative.

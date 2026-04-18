@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [],
+  "linked": [
+    [
+      "@lunacord/core",
+      "@lunacord/discordjs",
+      "@lunacord/plugins",
+      "@lunacord/lyrics",
+      "@lunacord/cache-redis"
+    ]
+  ],
+  "access": "public",
+  "baseBranch": "master",
+  "updateInternalDependencies": "patch",
+  "ignore": [
+    "@lunacord/test-utils",
+    "@lunacord/tsconfig",
+    "@lunacord/docs",
+    "@lunacord/example-bot",
+    "@lunacord/skill"
+  ]
+}

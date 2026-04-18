@@ -1,0 +1,52 @@
+---
+title: Lyrics
+description: Lyrics.ovh and Genius providers with caching, de-duplication, and OAuth helpers.
+---
+
+`@lunacord/lyrics` is opt-in — core exposes only the `LyricsProvider` contract. Install a real client, build it, and hand it to Lunacord.
+
+```ts
+import { LyricsClient } from "@lunacord/lyrics";
+
+const lyrics = LyricsClient.create()
+  .provider.lyricsOvh()
+  .provider.genius({
+    clientId: process.env.GENIUS_CLIENT_ID!,
+    clientSecret: process.env.GENIUS_CLIENT_SECRET!,
+    accessToken: process.env.GENIUS_ACCESS_TOKEN!,
+  })
+  .fallbackOrder(["lyricsOvh", "genius"])
+  .build();
+
+lunacord.lyrics(lyrics);
+// or with MusicKit:
+MusicKit.create(client, { nodes, lyrics });
+```
+
+The client caches results per-track, and **reference-counts active guilds** — lyrics are only cached while at least one guild is actively playing the track. When no guild is using a track anymore, its cache entry is evicted.
+
+## Querying
+
+```ts
+const result = await lunacord.getLyrics(guildId);
+if (result.status === "found") {
+  console.log(result.lyrics.lyricsText);
+} else if (result.status === "unavailable") {
+  // No provider installed, or all providers returned provider_unavailable.
+}
+```
+
+With MusicKit, `/lyrics` uses the configured provider automatically.
+
+## Genius OAuth helper
+
+```ts
+import { GeniusOAuthHelper } from "@lunacord/lyrics";
+
+const token = await GeniusOAuthHelper.exchangeCode({
+  clientId,
+  clientSecret,
+  code,
+  redirectUri,
+});
+```

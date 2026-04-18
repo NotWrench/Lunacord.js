@@ -1,0 +1,38 @@
+---
+title: Builders
+description: The fluent, type-state builder APIs.
+---
+
+Every public API in `@lunacord/core` has a fluent builder. Most of them use TypeScript's type-state pattern — methods required for construction return a *different* builder type, so you can't call `.build()` (or `.register()`, or `.connect()`) until the required methods have been called.
+
+## `LunacordBuilder`
+
+Used as `Lunacord.create()`. See [Lunacord](/docs/core/lunacord).
+
+## `NodeBuilder`
+
+Used as `lunacord.createNode()`. See [Node](/docs/core/node).
+
+## `PlayerBuilder`
+
+Used as `lunacord.createPlayer()` (no args). See [Player](/docs/core/player).
+
+## `PluginBuilder`
+
+Used as `lunacord.createPlugin("name", "1.0.0")`. See [Plugins](/docs/plugins).
+
+## `FilterBuilder`
+
+Used as `player.createFilterBuilder()`. See [Filters](/docs/filters).
+
+## Builder pattern (example)
+
+```ts
+const plugin = lunacord
+  .createPlugin({ name: "custom", version: "1.0.0", apiVersion: "2" })
+  .observe((event, ctx) => ctx.logger.debug(`saw ${event.type}`))
+  .beforeRestRequest(async (context) => ({ ...context, headers: { ...context.headers, "X-Bot": "me" } }))
+  .build();
+
+lunacord.use(plugin);
+```

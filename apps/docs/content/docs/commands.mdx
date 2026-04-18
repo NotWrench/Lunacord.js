@@ -1,0 +1,83 @@
+---
+title: Commands
+description: The default command pack, overrides, middleware, and registering your own.
+---
+
+## The default pack
+
+`music.commands.installDefaults()` publishes **18 slash commands**:
+
+| Name | Description |
+|------|-------------|
+| `/play` | Smart URL / provider detection, fallback chain |
+| `/pause`, `/resume` | Toggle playback |
+| `/stop` | Stop, clear queue, leave voice |
+| `/skip`, `/previous` | Skip forward / rewind via history |
+| `/seek` | Seek to seconds |
+| `/volume` | Get or set (0–1000) |
+| `/queue`, `/clear`, `/nowplaying` | Queue inspection + management |
+| `/shuffle` | Shuffle upcoming queue |
+| `/repeat` | `track` \| `queue` \| `off` |
+| `/filter` | Preset: `bassboost`, `nightcore`, `vaporwave`, `karaoke`, `clear` |
+| `/lyrics` | Current track lyrics (opt. `query`) |
+| `/autoplay` | Toggle state flag — combine with `createAutoplayPlugin` |
+| `/join`, `/leave` | Voice channel control |
+
+## Install options
+
+```ts
+await music.commands.installDefaults({
+  scope: "guild",              // or "global"
+  guildId: "123...",           // required when scope: "guild"
+  only: ["play", "skip"],      // install a subset
+  except: ["autoplay"],        // or exclude some
+  skipPublish: true,           // register handlers but skip the Discord REST PUT
+});
+```
+
+Use `scope: "guild"` during development — commands appear instantly. Global commands take up to an hour to propagate.
+
+## Override a command
+
+```ts
+music.commands.override("play", async (ctx) => {
+  const query = ctx.interaction.options.getString("query", true);
+  return ctx.reply(`(custom play) ${query}`);
+});
+```
+
+## Add middleware (pre-handler hooks)
+
+Middleware runs before the handler, and can short-circuit by not calling `next()`.
+
+```ts
+music.commands.extend("skip", async (ctx, next) => {
+  // gate by role
+  const member = ctx.interaction.member;
+  if (!member || !("permissions" in member)) {
+    return ctx.error("Members only.");
+  }
+  return next();
+});
+```
+
+## Add your own command
+
+```ts
+import { SlashCommandBuilder } from "discord.js";
+
+music.register({
+  data: new SlashCommandBuilder().setName("ping").setDescription("Pong."),
+  execute: async (ctx) => ctx.reply("Pong!"),
+});
+```
+
+The `CommandContext` gives you:
+
+- `ctx.interaction` — typed `ChatInputCommandInteraction`
+- `ctx.lunacord` — the manager
+- `ctx.music` — the MusicKit itself
+- `ctx.getPlayer()` — existing player or `undefined` (also sets its text channel)
+- `ctx.joinAndGetPlayer()` — get or create + connect voice (replies with an error ephemerally if the user isn't in VC)
+- `ctx.resolveVoiceChannel()` — resolves the user's voice channel id
+- `ctx.reply(payload)` / `ctx.error(message)` — reply helpers
