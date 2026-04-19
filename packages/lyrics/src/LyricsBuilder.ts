@@ -18,19 +18,23 @@ type ProviderName = "genius" | "lyricsOvh";
  * ```
  */
 export class LyricsBuilder {
-  private readonly geniusOptions?: GeniusOptions;
-  private readonly lyricsOvhEnabled = false;
+  private readonly providerState: {
+    geniusOptions?: GeniusOptions;
+    lyricsOvhEnabled: boolean;
+  } = {
+    lyricsOvhEnabled: false,
+  };
   private cacheNamespace?: Cache;
   private requestTimeoutMs?: number;
   private order: readonly ProviderName[] = ["lyricsOvh", "genius"];
 
   readonly provider = {
     genius: (options: GeniusOptions): this => {
-      this.geniusOptions = options;
+      this.providerState.geniusOptions = options;
       return this;
     },
     lyricsOvh: (): this => {
-      this.lyricsOvhEnabled = true;
+      this.providerState.lyricsOvhEnabled = true;
       return this;
     },
   };
@@ -53,10 +57,10 @@ export class LyricsBuilder {
   build(): LyricsProvider {
     return new LyricsClient(
       {
-        ...(this.geniusOptions ? { genius: this.geniusOptions } : {}),
+        ...(this.providerState.geniusOptions ? { genius: this.providerState.geniusOptions } : {}),
         ...(this.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: this.requestTimeoutMs }),
         order: this.order,
-        lyricsOvhEnabled: this.lyricsOvhEnabled,
+        lyricsOvhEnabled: this.providerState.lyricsOvhEnabled,
       } as never,
       this.cacheNamespace ? { cache: this.cacheNamespace } : undefined
     );
