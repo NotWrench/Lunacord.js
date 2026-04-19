@@ -11,5 +11,5 @@ export const readyEventHandler: DiscordEventHandler = (client) => {
   };
 
   client.once("clientReady", onReady);
-  client.once("ready", onReady);
+  client.once("ready", onReady); // Going to be deprecated in discord.js v14, but we still want to support it for now
 };
