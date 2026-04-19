@@ -64,29 +64,8 @@ music.register({
   execute: async (ctx) => ctx.reply("Pong!"),
 });
 
-music.register({
-  data: new SlashCommandBuilder()
-    .setName("play")
-    .setDescription("Play a song.")
-    .addStringOption((option) =>
-      option.setName("query").setDescription("The song to play.").setRequired(true)
-    ),
-  execute: async (ctx) => {
-    const query = ctx.interaction.options.getString("query", true);
-
-    const player = await ctx.joinAndGetPlayer();
-    if (!player) {
-      return ctx.error("Failed to join voice channel.");
-    }
-
-    const result = await player.searchAndPlay(query, "ytsearch");
-    if (result.loadType === "error" && result.error) {
-      return ctx.error(result.error.message as string);
-    }
-
-    return ctx.reply(`(custom) playing ${result.tracks[0]?.title}`);
-  },
-});
+// /play is provided by installDefaults() — it uses Player.searchAndPlay / applySearchResult:
+// enqueue when something is already playing, otherwise enqueue + start playback.
 
 // --- Example: add middleware to /skip (logging) ------------------------------
 // music.commands.extend("skip", (ctx, next) => {
