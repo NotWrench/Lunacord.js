@@ -16,7 +16,7 @@ Lunacord is a Bun + Node.js Lavalink v4 client shipped as a monorepo of `@lunaco
 - `@lunacord/plugins` — `PluginBuilder`, `PluginManager`, builtins: `createLoggerPlugin`, `createMetricsPlugin`, `createDebugPlugin`, `createAutoplayPlugin`, `createStatsReporterPlugin`.
 - `@lunacord/lyrics` — `LyricsClient` (Lyrics.ovh + Genius) with a fluent builder and OAuth helper.
 - `@lunacord/cache-redis` — `RedisCacheStore`, `RedisPersistenceAdapter`.
-- `lunacord.js` — deprecated meta-package re-exporting `@lunacord/core` for 0.x users.
+- `lunacord.js` — umbrella npm package: re-exports `@lunacord/*`, subpaths for plugins/lyrics/cache, and `createLunacordMusicClient()` preset.
 
 ## Runtime / versions
 

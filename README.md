@@ -12,7 +12,7 @@ Monorepo for the `@lunacord/*` family of packages — a modern, type-safe, batte
 | [`@lunacord/lyrics`](packages/lyrics) | Composable `LyricsClient` with Lyrics.ovh + Genius providers and a Genius OAuth helper. |
 | [`@lunacord/cache-redis`](packages/cache-redis) | `RedisCacheStore` + `RedisPersistenceAdapter` for post-restart rehydrate. |
 | [`@lunacord/test-utils`](packages/test-utils) *(private)* | Mock Lavalink server + stub WebSocket factory. |
-| `lunacord.js` *(deprecated)* | Meta-package that re-exports `@lunacord/core` for 0.x users. |
+| [`lunacord.js`](packages/lunacord-meta) | Umbrella npm package: re-exports `@lunacord/*`, subpaths (`/plugins`, `/lyrics`, `/cache`), and `createLunacordMusicClient()` preset. |
 
 ## Apps
 

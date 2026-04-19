@@ -1,10 +1,76 @@
 {
-  "name": "@lunacord/skill",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Agent SKILL.md bundle for Lunacord (AI coding assistants).",
+  "name": "lunacord.js",
+  "version": "1.0.0-beta",
+  "description": "Lunacord umbrella: re-exports @lunacord/* plus createLunacordMusicClient() preset for discord.js bots.",
+  "type": "module",
   "license": "MIT",
+  "sideEffects": false,
   "files": [
-    "SKILL.md"
-  ]
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./plugins": {
+      "types": "./dist/entry-plugins.d.ts",
+      "import": "./dist/entry-plugins.js"
+    },
+    "./lyrics": {
+      "types": "./dist/entry-lyrics.d.ts",
+      "import": "./dist/entry-lyrics.js"
+    },
+    "./cache": {
+      "types": "./dist/entry-cache.d.ts",
+      "import": "./dist/entry-cache.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist .turbo",
+    "lint": "biome lint src",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'meta-package re-exports @lunacord/core — see core test suite'"
+  },
+  "dependencies": {
+    "@lunacord/cache-redis": "workspace:*",
+    "@lunacord/core": "workspace:*",
+    "@lunacord/discordjs": "workspace:*",
+    "@lunacord/lyrics": "workspace:*",
+    "@lunacord/plugins": "workspace:*"
+  },
+  "devDependencies": {
+    "@lunacord/tsconfig": "workspace:*",
+    "discord.js": "^14.26.2",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "discord.js": "^14.0.0",
+    "redis": "^5.11.0",
+    "typescript": "^5"
+  },
+  "peerDependenciesMeta": {
+    "redis": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "bun": ">=1.3.0",
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NotWrench/Lunacord.js",
+    "directory": "packages/lunacord-meta"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

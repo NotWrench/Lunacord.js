@@ -99,7 +99,7 @@
     },
     "packages/core": {
       "name": "@lunacord/core",
-      "version": "1.0.0-alpha.0",
+      "version": "1.0.0-beta",
       "dependencies": {
         "zod": "^4.3.6",
       },
@@ -134,12 +134,26 @@
       "name": "lunacord.js",
       "version": "1.0.0-alpha.0",
       "dependencies": {
+        "@lunacord/cache-redis": "workspace:*",
         "@lunacord/core": "workspace:*",
+        "@lunacord/discordjs": "workspace:*",
+        "@lunacord/lyrics": "workspace:*",
+        "@lunacord/plugins": "workspace:*",
       },
       "devDependencies": {
         "@lunacord/tsconfig": "workspace:*",
+        "discord.js": "^14.26.2",
         "typescript": "^5.7.3",
       },
+      "peerDependencies": {
+        "discord.js": "^14.0.0",
+        "redis": "^5.11.0",
+        "typescript": "^5",
+      },
+      "optionalPeers": [
+        "redis",
+        "typescript",
+      ],
     },
     "packages/lunacordjs": {
       "name": "@lunacord/skill",
@@ -163,7 +177,7 @@
     },
     "packages/plugins": {
       "name": "@lunacord/plugins",
-      "version": "1.0.0-alpha.0",
+      "version": "1.0.0-beta",
       "dependencies": {
         "@lunacord/core": "workspace:*",
       },

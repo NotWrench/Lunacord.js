@@ -13,17 +13,17 @@ bun add @lunacord/core @lunacord/discordjs discord.js
 bun add @lunacord/plugins @lunacord/lyrics @lunacord/cache-redis   # optional
 ```
 
-`lunacord.js` is still on npm as a deprecated meta-package — existing imports keep working for one minor cycle.
+`lunacord.js` on npm is an **umbrella** package: it re-exports the scoped libraries, keeps subpaths (`lunacord.js/plugins`, `/lyrics`, `/cache`), and adds **`createLunacordMusicClient()`** (discord.js `Client` + `MusicKit`). You can stay on `lunacord.js` or switch to `@lunacord/*` for smaller installs.
 
 ## Imports
 
-| Before | After |
-|--------|-------|
-| `from "lunacord.js"` | `from "@lunacord/core"` |
-| `from "lunacord.js/plugins"` | `from "@lunacord/plugins"` |
-| `from "lunacord.js/lyrics"` | `from "@lunacord/lyrics"` |
-| `from "lunacord.js/cache"` (`RedisCacheStore`) | `from "@lunacord/cache-redis"` |
-| `from "lunacord.js/errors"` | `from "@lunacord/core"` (errors re-exported from root) |
+| Before | After (scoped) | `lunacord.js` still works |
+|--------|------------------|---------------------------|
+| `from "lunacord.js"` | `from "@lunacord/core"` | root re-exports core + more |
+| `from "lunacord.js/plugins"` | `from "@lunacord/plugins"` | `./plugins` |
+| `from "lunacord.js/lyrics"` | `from "@lunacord/lyrics"` | `./lyrics` |
+| `from "lunacord.js/cache"` (`RedisCacheStore`) | `from "@lunacord/cache-redis"` | `./cache` |
+| `from "lunacord.js/errors"` | `from "@lunacord/core"` (errors re-exported from root) | root |
 
 ## Behavior changes
 

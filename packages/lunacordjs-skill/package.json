@@ -1,0 +1,10 @@
+{
+  "name": "@lunacord/skill",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Agent SKILL.md bundle for Lunacord (AI coding assistants).",
+  "license": "MIT",
+  "files": [
+    "SKILL.md"
+  ]
+}
