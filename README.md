@@ -1,6 +1,7 @@
-# Lunacord — Lavalink v4, builder-first.
+# Lunacord.js
 
-Monorepo for the `@lunacord/*` family of packages — a modern, type-safe, batteries-included Lavalink v4 client for Bun and Node.js.
+Yeah I pretty much vibed it with Opus 4.7 and decided to release it as is ;-;
+Let me know how much cooked this is :>
 
 ## Packages
 
