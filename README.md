@@ -56,7 +56,7 @@ bun --filter @lunacord/example-bot-core dev
 
 ### Docs site (Vercel)
 
-Production URL: **[lunacord-js-docs.vercel.app](https://lunacord-js-docs.vercel.app/)**. Pushes to `main` / `master` that touch docs-related paths run [`.github/workflows/docs.yml`](.github/workflows/docs.yml): it verifies `turbo run build --filter=@lunacord/docs`, then runs `vercel deploy --prod`. Configure repository secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` (from the linked Vercel project). If the Vercel project **also** has GitHub auto-deploy enabled for `main`, you will get two production deploys per push—turn off one or the other.
+Production URL: **[lunacord-js-docs.vercel.app](https://lunacord-js-docs.vercel.app/)**. Pushes to `main` / `master` that touch docs-related paths run [`.github/workflows/docs.yml`](.github/workflows/docs.yml): it verifies `turbo run build --filter=@lunacord/docs`, then runs `vercel deploy --prod` from the **repository root** (Vercel project **Root Directory** must be `apps/docs`—do not `cd` into `apps/docs` in the workflow or paths double up). Configure repository secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID`. If the Vercel project **also** has GitHub auto-deploy enabled for `main`, you will get two production deploys per push—turn off one or the other.
 
 ### Tooling
 

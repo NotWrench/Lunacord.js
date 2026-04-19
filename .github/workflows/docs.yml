@@ -37,9 +37,7 @@ jobs:
       - name: Verify docs build (workspace)
         run: bunx turbo run build --filter=@lunacord/docs
 
-      # Project "Root Directory" in Vercel should be `apps/docs` (matches this cwd).
       - name: Deploy production to Vercel
-        working-directory: apps/docs
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
