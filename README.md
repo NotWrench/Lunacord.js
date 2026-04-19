@@ -30,4 +30,4 @@ Guides and API reference: **[lunacord-js-docs.vercel.app](https://lunacord-js-do
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT
