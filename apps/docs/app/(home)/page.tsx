@@ -51,7 +51,7 @@ export default function HomePage() {
             padding: "0.75rem 1.25rem",
             borderRadius: "0.5rem",
             background: "var(--color-fd-primary, #8b5cf6)",
-            color: "white",
+            color: "var(--color-fd-primary-foreground, white)",
             textDecoration: "none",
             fontWeight: 600,
           }}
@@ -64,6 +64,7 @@ export default function HomePage() {
             padding: "0.75rem 1.25rem",
             borderRadius: "0.5rem",
             border: "1px solid var(--color-fd-border, rgba(255,255,255,.15))",
+            color: "var(--color-fd-foreground, currentColor)",
             textDecoration: "none",
             fontWeight: 600,
           }}
@@ -76,6 +77,7 @@ export default function HomePage() {
             padding: "0.75rem 1.25rem",
             borderRadius: "0.5rem",
             border: "1px solid var(--color-fd-border, rgba(255,255,255,.15))",
+            color: "var(--color-fd-foreground, currentColor)",
             textDecoration: "none",
             fontWeight: 600,
           }}

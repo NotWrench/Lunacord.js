@@ -2,7 +2,7 @@
   "name": "@lunacord/docs",
   "version": "0.0.0",
   "private": true,
-  "description": "Lunacord documentation site (Next.js 15 + Fumadocs).",
+  "description": "Lunacord documentation site",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -17,10 +17,10 @@
     "@lunacord/core": "workspace:*",
     "@lunacord/discordjs": "workspace:*",
     "@lunacord/plugins": "workspace:*",
-    "fumadocs-core": "^14.7.0",
-    "fumadocs-mdx": "^11.3.0",
-    "fumadocs-ui": "^14.7.0",
-    "next": "^15.1.4",
+    "fumadocs-core": "^16.7.16",
+    "fumadocs-mdx": "^14.3.0",
+    "fumadocs-ui": "^16.7.16",
+    "next": "^16.2.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

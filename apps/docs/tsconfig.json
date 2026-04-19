@@ -11,7 +11,7 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@/.source": ["./.source/index.ts"]
+      "collections/*": ["./.source/*"]
     },
     "allowJs": true
   },

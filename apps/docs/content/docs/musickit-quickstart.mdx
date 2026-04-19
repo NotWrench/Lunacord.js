@@ -1,0 +1,52 @@
+---
+title: MusicKit Quickstart
+description: A working music bot in five minutes using MusicKit and discord.js.
+---
+
+## 1. Install
+
+```bash
+bun add @lunacord/core @lunacord/discordjs discord.js
+# Optional
+bun add @lunacord/lyrics @lunacord/cache-redis @lunacord/plugins
+```
+
+## 2. Start a Lavalink v4 server
+
+Download the [latest Lavalink v4 jar](https://github.com/lavalink-devs/Lavalink/releases) and run:
+
+```bash
+java -jar Lavalink.jar
+```
+
+Default port is `2333`, default password is `youshallnotpass`.
+
+## 3. Wire the bot
+
+```ts
+import { Client, GatewayIntentBits } from "discord.js";
+import { MusicKit } from "@lunacord/discordjs";
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
+});
+
+const music = MusicKit.create(client, {
+  nodes: [{ id: "main", host: "localhost", port: 2333, password: "youshallnotpass" }],
+  onReady: async () => {
+    await music.commands.installDefaults({ scope: "guild", guildId: process.env.GUILD_ID! });
+  },
+});
+
+await client.login(process.env.DISCORD_TOKEN);
+```
+
+That's it. The following slash commands are now live in your guild:
+
+`/play` `/pause` `/resume` `/stop` `/skip` `/previous` `/seek` `/volume` `/queue` `/nowplaying` `/clear` `/shuffle` `/repeat` `/filter` `/lyrics` `/autoplay` `/join` `/leave`
+
+## 4. Customize
+
+See [Commands](/docs/commands) for `override`, `extend`, and `install([...])` patterns, plus how to register your own custom commands.
+
+Prefer wiring `Lunacord` yourself? See the [core Quickstart](/docs/quickstart).

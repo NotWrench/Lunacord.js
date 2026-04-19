@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "quickstart",
+    "musickit-quickstart",
     "---MusicKit---",
     "musickit",
     "commands",
@@ -21,7 +22,6 @@
     "lyrics",
     "---Reference---",
     "advanced",
-    "recipes",
-    "migration"
+    "recipes"
   ]
 }

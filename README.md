@@ -12,13 +12,13 @@ Monorepo for the `@lunacord/*` family of packages — a modern, type-safe, batte
 | [`@lunacord/lyrics`](packages/lyrics) | Composable `LyricsClient` with Lyrics.ovh + Genius providers and a Genius OAuth helper. |
 | [`@lunacord/cache-redis`](packages/cache-redis) | `RedisCacheStore` + `RedisPersistenceAdapter` for post-restart rehydrate. |
 | [`@lunacord/test-utils`](packages/test-utils) *(private)* | Mock Lavalink server + stub WebSocket factory. |
-| `lunacord.js` *(deprecated)* | Meta-package that re-exports `@lunacord/core` for 0.x users. |
+| [`lunacord.js`](packages/lunacord-meta) | Umbrella npm package: re-exports `@lunacord/*`, subpaths (`/plugins`, `/lyrics`, `/cache`), and `createLunacordMusicClient()` preset. |
 
 ## Apps
 
 | App | Description |
 |-----|-------------|
-| [`apps/docs`](apps/docs) | Documentation site — Next.js 15 + Fumadocs. |
+| [`apps/docs`](apps/docs) | Documentation site — Next.js + Fumadocs, live at [lunacord-js-docs.vercel.app](https://lunacord-js-docs.vercel.app/). |
 | [`apps/example-bot-musickit`](apps/example-bot-musickit) | Runnable discord.js music bot using MusicKit. |
 | [`apps/example-bot-core`](apps/example-bot-core) | Runnable discord.js music bot using only core + manual Discord wiring. |
 
@@ -40,7 +40,7 @@ const music = MusicKit.create(client, {
 await client.login(process.env.DISCORD_TOKEN);
 ```
 
-See [`apps/docs`](apps/docs) for the full guide, [`apps/example-bot-musickit`](apps/example-bot-musickit) for the batteries-included adapter demo, or [`apps/example-bot-core`](apps/example-bot-core) for the core-only manual wiring variant.
+Guides and API reference: **[lunacord-js-docs.vercel.app](https://lunacord-js-docs.vercel.app/)** (source in [`apps/docs`](apps/docs)). Demos: [`apps/example-bot-musickit`](apps/example-bot-musickit) (MusicKit), [`apps/example-bot-core`](apps/example-bot-core) (core-only).
 
 ## Development
 
@@ -54,16 +54,9 @@ bun --filter @lunacord/example-bot-musickit dev
 bun --filter @lunacord/example-bot-core dev
 ```
 
-### Tooling
+### Docs site (Vercel)
 
-- **Bun workspaces** + **Turborepo** for orchestration.
-- **Biome via [Ultracite](https://ultracite.dev)** for lint + format.
-- **Changesets** for multi-package versioning.
-- **lefthook** pre-commit + commit-msg (conventional commits via `commitlint`).
-
-## Migration from 0.x
-
-See [MIGRATION.md](MIGRATION.md) for a short version, or the full [migration doc](apps/docs/content/docs/migration.mdx).
+**[lunacord-js-docs.vercel.app](https://lunacord-js-docs.vercel.app/)**. 
 
 ## License
 
