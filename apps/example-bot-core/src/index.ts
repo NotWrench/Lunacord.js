@@ -27,12 +27,17 @@ if (redis) {
   await redis.connect();
 }
 
+const lyricsCacheStore = redis ? RedisCache.from(redis).build() : undefined;
+const lyricsCacheManager = lyricsCacheStore
+  ? new CacheManager({ store: lyricsCacheStore })
+  : undefined;
+
 const lyricsBuilder = LyricsClient.create().provider.lyricsOvh();
 if (config.genius) {
   lyricsBuilder.provider.genius(config.genius);
 }
-if (redis) {
-  lyricsBuilder.cache(new CacheManager().cache("lyrics"));
+if (lyricsCacheManager) {
+  lyricsBuilder.cache(lyricsCacheManager.cache("lyrics"));
 }
 const lyrics = lyricsBuilder.build();
 
@@ -57,7 +62,6 @@ lunacord.use(createDebugPlugin({ name: "debug", version: "1.0.0" }));
 
 if (redis) {
   lunacord.emitDebug("manager", "Redis cache wired", { url: config.redis?.url });
-  RedisCache.from(redis).build();
 }
 
 const commandData = [
@@ -127,6 +131,12 @@ const joinAndGetPlayer = async (
   if (existing) {
     existing.setTextChannel(interaction.channelId);
     if (!existing.isConnected) {
+      await existing.connect(channelId);
+      return existing;
+    }
+    const node = lunacord.getNodes().find((n) => n.getPlayer(guildId));
+    const currentVoiceChannelId = node?.getVoiceChannelId(guildId);
+    if (currentVoiceChannelId !== channelId) {
       await existing.connect(channelId);
     }
     return existing;

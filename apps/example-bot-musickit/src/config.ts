@@ -14,20 +14,24 @@ export interface DemoConfig {
  * example ~15 lines of meaningful code in `index.ts`; config lives here for clarity.
  */
 export const loadConfig = (): DemoConfig => {
-  const discordToken = process.env.DISCORD_TOKEN;
+  const discordToken = process.env.DISCORD_TOKEN?.trim();
   if (!discordToken) {
     throw new Error("DISCORD_TOKEN is required to run the example bot.");
   }
+
+  const lavalinkPortRaw = process.env.LAVALINK_PORT?.trim();
+  const lavalinkPort = lavalinkPortRaw ? Number(lavalinkPortRaw) : 2333;
+  const port = Number.isFinite(lavalinkPort) ? lavalinkPort : 2333;
 
   const config: DemoConfig = {
     discordToken,
     nodes: [
       {
-        id: process.env.LAVALINK_ID ?? "main",
-        host: process.env.LAVALINK_HOST ?? "localhost",
-        port: Number(process.env.LAVALINK_PORT ?? 2333),
-        password: process.env.LAVALINK_PASSWORD ?? "youshallnotpass",
-        secure: process.env.LAVALINK_SECURE === "true",
+        id: process.env.LAVALINK_ID?.trim() || "main",
+        host: process.env.LAVALINK_HOST?.trim() || "localhost",
+        port,
+        password: process.env.LAVALINK_PASSWORD?.trim() || "youshallnotpass",
+        secure: process.env.LAVALINK_SECURE?.trim().toLowerCase() === "true",
       },
     ],
   };
