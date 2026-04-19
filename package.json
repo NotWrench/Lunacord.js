@@ -22,7 +22,7 @@
     "version-packages": "bunx changeset version",
     "publish:packages": "turbo run build --filter='./packages/*' && bunx changeset publish",
     "release": "bun run publish:packages",
-    "prepare": "bunx lefthook install",
+    "prepare": "node -e \"const fs=require('node:fs'),cp=require('node:child_process');if(process.env.CI||process.env.VERCEL||!fs.existsSync('.git'))process.exit(0);cp.execSync('bunx lefthook install',{stdio:'inherit'})\"",
     "demo:bot": "bun --filter @lunacord/example-bot-musickit dev",
     "demo:bot:musickit": "bun --filter @lunacord/example-bot-musickit dev",
     "demo:bot:core": "bun --filter @lunacord/example-bot-core dev",
