@@ -20,7 +20,8 @@ const music = MusicKit.create(client, {
 await client.login(process.env.DISCORD_TOKEN);
 ```
 
-Guides and API reference: **[lunacord-js-docs.vercel.app](https://lunacord-js-docs.vercel.app/)** (source in [`apps/docs`](apps/docs)). Demos: [`apps/example-bot-musickit`](apps/example-bot-musickit) (MusicKit), [`apps/example-bot-core`](apps/example-bot-core) (core-only).
+Guides and API reference: **[lunacord-js-docs.vercel.app](https://lunacord-js-docs.vercel.app/)** (source in [`apps/docs`](apps/docs)). 
+Demos: [`apps/example-bot-musickit`](apps/example-bot-musickit) (MusicKit), [`apps/example-bot-core`](apps/example-bot-core) (core-only).
 
 ### Docs
 
