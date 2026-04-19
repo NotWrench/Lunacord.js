@@ -1,6 +1,6 @@
 {
   "name": "@lunacord/core",
-  "version": "1.0.0-alpha.0",
+  "version": "1.0.0-beta",
   "description": "Builder-first Lavalink v4 client for Bun and Node.js. Nodes, players, queues, filters, lyrics, plugins, cache — all with a strictly-typed API.",
   "type": "module",
   "license": "MIT",
