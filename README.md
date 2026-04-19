@@ -3,7 +3,7 @@
 Yeah I pretty much vibed it with Opus 4.7 and decided to release it as is ;-;
 Let me know how much cooked this is :>
 
-## Quickstart — music bot in ~15 lines
+## Quickstart
 
 ```ts
 import { Client, GatewayIntentBits } from "discord.js";
