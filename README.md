@@ -1,8 +1,6 @@
 # Lunacord.js
 
-Yeah I pretty much vibed it with Opus 4.7 and decided to release it as is ;-;
-Let me know how much cooked this is :>
-Prevously known as Cosmicord.js, but I guess I had a change of heart and decided to release a new library and start fresh
+Previously known as Cosmicord.js, but I guess I had a change of heart and decided to release a new library and start fresh
 
 ## Quickstart
 
