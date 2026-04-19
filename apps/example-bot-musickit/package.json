@@ -1,5 +1,5 @@
 {
-  "name": "@lunacord/example-bot",
+  "name": "@lunacord/example-bot-musickit",
   "version": "0.0.0",
   "private": true,
   "description": "Runnable discord.js music bot demo using @lunacord/discordjs MusicKit.",

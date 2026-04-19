@@ -19,7 +19,8 @@ Monorepo for the `@lunacord/*` family of packages — a modern, type-safe, batte
 | App | Description |
 |-----|-------------|
 | [`apps/docs`](apps/docs) | Documentation site — Next.js 15 + Fumadocs. |
-| [`apps/example-bot`](apps/example-bot) | Runnable discord.js music bot using MusicKit. |
+| [`apps/example-bot-musickit`](apps/example-bot-musickit) | Runnable discord.js music bot using MusicKit. |
+| [`apps/example-bot-core`](apps/example-bot-core) | Runnable discord.js music bot using only core + manual Discord wiring. |
 
 ## Quickstart — music bot in ~15 lines
 
@@ -39,7 +40,7 @@ const music = MusicKit.create(client, {
 await client.login(process.env.DISCORD_TOKEN);
 ```
 
-See [`apps/docs`](apps/docs) for the full guide or [`apps/example-bot`](apps/example-bot) for a runnable version with Redis + lyrics + plugin wiring.
+See [`apps/docs`](apps/docs) for the full guide, [`apps/example-bot-musickit`](apps/example-bot-musickit) for the batteries-included adapter demo, or [`apps/example-bot-core`](apps/example-bot-core) for the core-only manual wiring variant.
 
 ## Development
 
@@ -49,7 +50,8 @@ bunx turbo build              # build every library
 bunx turbo run test           # run every test suite
 bunx turbo run typecheck      # tsc --noEmit across the monorepo
 bun --filter @lunacord/docs dev
-bun --filter @lunacord/example-bot dev
+bun --filter @lunacord/example-bot-musickit dev
+bun --filter @lunacord/example-bot-core dev
 ```
 
 ### Tooling

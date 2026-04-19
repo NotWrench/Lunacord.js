@@ -1,6 +1,6 @@
-# Lunacord — Example Bot
+# Lunacord — Example Bot (Core)
 
-Batteries-included music bot in about 15 lines of meaningful code using [`@lunacord/discordjs`](../../packages/discordjs).
+Core-first music bot using [`@lunacord/core`](../../packages/core) with manual discord.js wiring.
 
 ## Run it
 
@@ -14,11 +14,11 @@ bun run dev
 
 ## What it demonstrates
 
-- `MusicKit.create(client, {...})` auto-wires raw-packet forwarding, op:4 gateway sends,
-  intent validation, `userId` / `numShards` binding, and a `sendGatewayPayload` implementation.
-- `music.commands.installDefaults()` registers 18 slash commands (play, pause, skip, etc.).
-- `music.register({...})` adds a custom command (`/ping`).
-- `music.commands.extend("skip", ...)` adds per-command middleware for logging.
+- `Lunacord.create()` with explicit `sendGatewayPayload` wiring.
+- Manual forwarding of Discord raw packets via `lunacord.handleVoicePacket(packet)`.
+- Manual identity binding with `lunacord.bindIdentity({ userId, numShards })` in the ready event.
+- Manual slash-command registration (`/ping`, `/play`) through Discord REST routes.
+- Manual interaction handling for command execution.
 - Optional Redis persistence so players rehydrate after bot restarts.
 - Optional lyrics via `@lunacord/lyrics` (Lyrics.ovh + Genius fallback).
 

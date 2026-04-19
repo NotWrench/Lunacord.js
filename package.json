@@ -22,7 +22,9 @@
     "version-packages": "bunx changeset version",
     "release": "turbo run build --filter='./packages/*' && bunx changeset publish",
     "prepare": "bunx lefthook install",
-    "demo:bot": "bun --filter @lunacord/example-bot dev",
+    "demo:bot": "bun --filter @lunacord/example-bot-musickit dev",
+    "demo:bot:musickit": "bun --filter @lunacord/example-bot-musickit dev",
+    "demo:bot:core": "bun --filter @lunacord/example-bot-core dev",
     "docs:dev": "bun --filter @lunacord/docs dev",
     "clean": "turbo run clean && rm -rf node_modules"
   },

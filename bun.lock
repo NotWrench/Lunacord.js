@@ -40,8 +40,25 @@
         "typescript": "^5.7.3",
       },
     },
-    "apps/example-bot": {
-      "name": "@lunacord/example-bot",
+    "apps/example-bot-core": {
+      "name": "@lunacord/example-bot-core",
+      "version": "0.0.0",
+      "dependencies": {
+        "@lunacord/cache-redis": "workspace:*",
+        "@lunacord/core": "workspace:*",
+        "@lunacord/lyrics": "workspace:*",
+        "@lunacord/plugins": "workspace:*",
+        "discord.js": "^14.26.2",
+        "redis": "^5.11.0",
+      },
+      "devDependencies": {
+        "@lunacord/tsconfig": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "^5.7.3",
+      },
+    },
+    "apps/example-bot-musickit": {
+      "name": "@lunacord/example-bot-musickit",
       "version": "0.0.0",
       "dependencies": {
         "@lunacord/cache-redis": "workspace:*",
@@ -123,6 +140,10 @@
         "typescript": "^5.7.3",
       },
     },
+    "packages/lunacordjs": {
+      "name": "@lunacord/skill",
+      "version": "0.0.0",
+    },
     "packages/lyrics": {
       "name": "@lunacord/lyrics",
       "version": "1.0.0-alpha.0",
@@ -153,10 +174,6 @@
       "peerDependencies": {
         "typescript": "^5",
       },
-    },
-    "packages/skill": {
-      "name": "@lunacord/skill",
-      "version": "0.0.0",
     },
     "packages/test-utils": {
       "name": "@lunacord/test-utils",
@@ -424,13 +441,15 @@
 
     "@lunacord/docs": ["@lunacord/docs@workspace:apps/docs"],
 
-    "@lunacord/example-bot": ["@lunacord/example-bot@workspace:apps/example-bot"],
+    "@lunacord/example-bot-core": ["@lunacord/example-bot-core@workspace:apps/example-bot-core"],
+
+    "@lunacord/example-bot-musickit": ["@lunacord/example-bot-musickit@workspace:apps/example-bot-musickit"],
 
     "@lunacord/lyrics": ["@lunacord/lyrics@workspace:packages/lyrics"],
 
     "@lunacord/plugins": ["@lunacord/plugins@workspace:packages/plugins"],
 
-    "@lunacord/skill": ["@lunacord/skill@workspace:packages/skill"],
+    "@lunacord/skill": ["@lunacord/skill@workspace:packages/lunacordjs"],
 
     "@lunacord/test-utils": ["@lunacord/test-utils@workspace:packages/test-utils"],
 
