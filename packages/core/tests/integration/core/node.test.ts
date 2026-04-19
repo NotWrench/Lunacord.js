@@ -289,6 +289,39 @@ describe("Node", () => {
       });
     });
 
+    it("should apply VOICE_STATE_UPDATE when userId is a getter (MusicKit / bindIdentity)", () => {
+      const nodeWithGetter = new Node({
+        ...NODE_OPTIONS,
+        userId: () => "user-123",
+      });
+
+      nodeWithGetter.handleVoicePacket({
+        t: "VOICE_STATE_UPDATE",
+        d: {
+          guild_id: "guild-getter",
+          user_id: "user-123",
+          session_id: "voice-session-getter",
+          channel_id: "channel-getter",
+        },
+      });
+
+      nodeWithGetter.handleVoicePacket({
+        t: "VOICE_SERVER_UPDATE",
+        d: {
+          guild_id: "guild-getter",
+          token: "voice-token-getter",
+          endpoint: "us-east.discord.gg",
+        },
+      });
+
+      expect(nodeWithGetter.getVoicePayload("guild-getter")).toEqual({
+        channelId: "channel-getter",
+        endpoint: "us-east.discord.gg",
+        sessionId: "voice-session-getter",
+        token: "voice-token-getter",
+      });
+    });
+
     it("should sync voice state to Lavalink when both VOICE packets are available", async () => {
       node.sessionId = "session-123";
       node.rest.updatePlayer = mock(() => Promise.resolve());

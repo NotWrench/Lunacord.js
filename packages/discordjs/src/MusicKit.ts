@@ -260,9 +260,13 @@ export class MusicKit {
   }
 
   private attachGatewayForwarding(): void {
-    // Forward every raw gateway packet — Lunacord filters VOICE_STATE_UPDATE / VOICE_SERVER_UPDATE.
-    this.client.on("raw", (packet) => {
+    // Forward every raw gateway packet; Lunacord filters VOICE_STATE_UPDATE / VOICE_SERVER_UPDATE.
+    const forwardVoicePacket = (packet: unknown): void => {
       this.lunacord.handleVoicePacket(packet);
+    };
+
+    this.client.on("raw", (packet) => {
+      forwardVoicePacket(packet);
     });
   }
 

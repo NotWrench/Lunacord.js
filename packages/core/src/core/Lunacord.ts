@@ -1312,6 +1312,7 @@ export class Lunacord extends TypedEventEmitter<LunacordEvents> {
           method: context.method,
           path: context.path,
         });
+        return undefined;
       },
       afterResponse: (context) => {
         this.logDebug("REST response", {

@@ -865,8 +865,11 @@ export class Node extends TypedEventEmitter<NodeEvents> {
   private handleVoiceStatePacket(packetData: Record<string, unknown>): void {
     const guildId = this.getString(packetData.guild_id);
     const userId = this.getString(packetData.user_id);
+    const botUserId = this.resolveUserId();
 
-    if (!guildId || userId !== this.options.userId) {
+    // Must match resolved id — Lunacord passes userId as a getter; comparing to options.userId
+    // directly would compare against a function and drop every gateway voice event.
+    if (!(guildId && botUserId) || userId !== botUserId) {
       return;
     }
 
@@ -922,6 +925,12 @@ export class Node extends TypedEventEmitter<NodeEvents> {
 
   private getString(value: unknown): string | undefined {
     return typeof value === "string" ? value : undefined;
+  }
+
+  /** Same resolution as Socket / Lavalink headers — supports `userId` as a late-bound getter. */
+  private resolveUserId(): string | undefined {
+    const raw = this.options.userId;
+    return typeof raw === "function" ? raw() : raw;
   }
 
   private resolveVoiceWaiters(guildId: string): void {

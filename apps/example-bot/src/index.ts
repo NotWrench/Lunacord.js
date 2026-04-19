@@ -64,17 +64,35 @@ music.register({
   execute: async (ctx) => ctx.reply("Pong!"),
 });
 
-// --- Example: override the built-in /play command ----------------------------
-// music.commands.override("play", async (ctx) => {
-//   const query = ctx.interaction.options.getString("query", true);
-//   return ctx.reply(`(custom) playing ${query}`);
-// });
+music.register({
+  data: new SlashCommandBuilder()
+    .setName("play")
+    .setDescription("Play a song.")
+    .addStringOption((option) =>
+      option.setName("query").setDescription("The song to play.").setRequired(true)
+    ),
+  execute: async (ctx) => {
+    const query = ctx.interaction.options.getString("query", true);
+
+    const player = await ctx.joinAndGetPlayer();
+    if (!player) {
+      return ctx.error("Failed to join voice channel.");
+    }
+
+    const result = await player.searchAndPlay(query, "ytsearch");
+    if (result.loadType === "error" && result.error) {
+      return ctx.error(result.error.message as string);
+    }
+
+    return ctx.reply(`(custom) playing ${result.tracks[0]?.title}`);
+  },
+});
 
 // --- Example: add middleware to /skip (logging) ------------------------------
-music.commands.extend("skip", (ctx, next) => {
-  console.log(`[skip] ${ctx.interaction.user.tag} in ${ctx.interaction.guild?.name}`);
-  return next();
-});
+// music.commands.extend("skip", (ctx, next) => {
+//   console.log(`[skip] ${ctx.interaction.user.tag} in ${ctx.interaction.guild?.name}`);
+//   return next();
+// });
 
 // --- Wire redis cache for @lunacord/core's cache manager (optional) ----------
 if (redis) {
