@@ -1,15 +1,15 @@
 ---
 title: Quickstart
-description: A working music bot in five minutes using MusicKit.
+description: Wire Lunacord core with discord.js — Lavalink manager, gateway voice packets, and playback.
 ---
 
 ## 1. Install
 
 ```bash
-bun add @lunacord/core @lunacord/discordjs discord.js
-# Optional
-bun add @lunacord/lyrics @lunacord/cache-redis @lunacord/plugins
+bun add @lunacord/core discord.js
 ```
+
+Optional: `@lunacord/lyrics`, `@lunacord/cache-redis`, `@lunacord/plugins` match what you need.
 
 ## 2. Start a Lavalink v4 server
 
@@ -21,30 +21,60 @@ java -jar Lavalink.jar
 
 Default port is `2333`, default password is `youshallnotpass`.
 
-## 3. Wire the bot
+## 3. Create `Lunacord` and attach Discord
+
+You forward gateway events, send `op: 4` voice payloads through the shard, and bind identity after the client is ready:
 
 ```ts
+import { Lunacord } from "@lunacord/core";
 import { Client, GatewayIntentBits } from "discord.js";
-import { MusicKit } from "@lunacord/discordjs";
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
 });
 
-const music = MusicKit.create(client, {
-  nodes: [{ id: "main", host: "localhost", port: 2333, password: "youshallnotpass" }],
-  onReady: async () => {
-    await music.commands.installDefaults({ scope: "guild", guildId: process.env.GUILD_ID! });
-  },
+const lunacord = Lunacord.create()
+  .nodes([{ id: "main", host: "localhost", port: 2333, password: "youshallnotpass" }])
+  .autoConnect(false)
+  .resume(true)
+  .sendGatewayPayload((guildId, payload) => {
+    client.guilds.cache.get(guildId)?.shard.send(payload);
+  })
+  .build();
+
+client.on("raw", (packet) => {
+  lunacord.handleVoicePacket(packet);
+});
+
+client.once("clientReady", async () => {
+  const user = client.user;
+  if (!user) return;
+  const numShards =
+    client.shard?.count ?? (client.ws.shards ? client.ws.shards.size : undefined) ?? 1;
+  lunacord.bindIdentity({ userId: user.id, numShards });
+  await lunacord.connect();
 });
 
 await client.login(process.env.DISCORD_TOKEN);
 ```
 
-That's it. The following slash commands are now live in your guild:
+## 4. Join voice and play
 
-`/play` `/pause` `/resume` `/stop` `/skip` `/previous` `/seek` `/volume` `/queue` `/nowplaying` `/clear` `/shuffle` `/repeat` `/filter` `/lyrics` `/autoplay` `/join` `/leave`
+Use your own command handler. The usual flow is: resolve the invoker’s voice channel id, then create or reuse a player, connect to that channel, then load tracks:
 
-## 4. Customize
+```ts
+const player = await lunacord
+  .createPlayer()
+  .setGuild(guildId)
+  .setVoiceChannel(voiceChannelId)
+  .setTextChannel(textChannelId)
+  .connect();
 
-See [Commands](/docs/commands) for `override`, `extend`, and `install([...])` patterns, plus how to register your own custom commands.
+const result = await player.searchAndPlay(query, "ytsearch");
+```
+
+See [Lunacord](/docs/core/lunacord) and [Player](/docs/core/player) for the full API.
+
+## 5. Batteries-included shortcut
+
+For automatic raw forwarding, `bindIdentity`, default slash commands, and embeds, use [`MusicKit`](/docs/musickit) and the [MusicKit Quickstart](/docs/musickit-quickstart) instead.

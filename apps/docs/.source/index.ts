@@ -1,24 +1,25 @@
 // @ts-nocheck -- skip type checking
 
 import { _runtime } from "fumadocs-mdx";
-import * as docs_0 from "../content/docs/advanced.mdx?collection=docs&hash=1776523865355";
-import * as docs_1 from "../content/docs/builders.mdx?collection=docs&hash=1776523865355";
-import * as docs_2 from "../content/docs/cache.mdx?collection=docs&hash=1776523865355";
-import * as docs_3 from "../content/docs/commands.mdx?collection=docs&hash=1776523865355";
-import * as docs_15 from "../content/docs/core/lunacord.mdx?collection=docs&hash=1776523865355";
-import * as docs_16 from "../content/docs/core/node.mdx?collection=docs&hash=1776523865355";
-import * as docs_17 from "../content/docs/core/player.mdx?collection=docs&hash=1776523865355";
-import * as docs_4 from "../content/docs/embeds.mdx?collection=docs&hash=1776523865355";
-import * as docs_5 from "../content/docs/filters.mdx?collection=docs&hash=1776523865355";
-import * as docs_6 from "../content/docs/index.mdx?collection=docs&hash=1776523865355";
-import * as docs_7 from "../content/docs/localization.mdx?collection=docs&hash=1776523865355";
-import * as docs_8 from "../content/docs/lyrics.mdx?collection=docs&hash=1776523865355";
-import * as docs_9 from "../content/docs/migration.mdx?collection=docs&hash=1776523865355";
-import * as docs_10 from "../content/docs/musickit.mdx?collection=docs&hash=1776523865355";
-import * as docs_11 from "../content/docs/persistence.mdx?collection=docs&hash=1776523865355";
-import * as docs_12 from "../content/docs/plugins.mdx?collection=docs&hash=1776523865355";
-import * as docs_13 from "../content/docs/quickstart.mdx?collection=docs&hash=1776523865355";
-import * as docs_14 from "../content/docs/recipes.mdx?collection=docs&hash=1776523865355";
+import * as docs_0 from "../content/docs/advanced.mdx?collection=docs&hash=1776586182942";
+import * as docs_1 from "../content/docs/builders.mdx?collection=docs&hash=1776586182942";
+import * as docs_2 from "../content/docs/cache.mdx?collection=docs&hash=1776586182942";
+import * as docs_3 from "../content/docs/commands.mdx?collection=docs&hash=1776586182942";
+import * as docs_16 from "../content/docs/core/lunacord.mdx?collection=docs&hash=1776586182942";
+import * as docs_17 from "../content/docs/core/node.mdx?collection=docs&hash=1776586182942";
+import * as docs_18 from "../content/docs/core/player.mdx?collection=docs&hash=1776586182942";
+import * as docs_4 from "../content/docs/embeds.mdx?collection=docs&hash=1776586182942";
+import * as docs_5 from "../content/docs/filters.mdx?collection=docs&hash=1776586182942";
+import * as docs_6 from "../content/docs/index.mdx?collection=docs&hash=1776586182942";
+import * as docs_7 from "../content/docs/localization.mdx?collection=docs&hash=1776586182942";
+import * as docs_8 from "../content/docs/lyrics.mdx?collection=docs&hash=1776586182942";
+import * as docs_9 from "../content/docs/migration.mdx?collection=docs&hash=1776586182942";
+import * as docs_11 from "../content/docs/musickit.mdx?collection=docs&hash=1776586182942";
+import * as docs_10 from "../content/docs/musickit-quickstart.mdx?collection=docs&hash=1776586182942";
+import * as docs_12 from "../content/docs/persistence.mdx?collection=docs&hash=1776586182942";
+import * as docs_13 from "../content/docs/plugins.mdx?collection=docs&hash=1776586182942";
+import * as docs_14 from "../content/docs/quickstart.mdx?collection=docs&hash=1776586182942";
+import * as docs_15 from "../content/docs/recipes.mdx?collection=docs&hash=1776586182942";
 import * as _source from "../source.config";
 export const docs = _runtime.docs<typeof _source.docs>(
   [
@@ -94,59 +95,66 @@ export const docs = _runtime.docs<typeof _source.docs>(
     },
     {
       info: {
+        path: "musickit-quickstart.mdx",
+        absolutePath: "D:/Coding/Lunacord.js/apps/docs/content/docs/musickit-quickstart.mdx",
+      },
+      data: docs_10,
+    },
+    {
+      info: {
         path: "musickit.mdx",
         absolutePath: "D:/Coding/Lunacord.js/apps/docs/content/docs/musickit.mdx",
       },
-      data: docs_10,
+      data: docs_11,
     },
     {
       info: {
         path: "persistence.mdx",
         absolutePath: "D:/Coding/Lunacord.js/apps/docs/content/docs/persistence.mdx",
       },
-      data: docs_11,
+      data: docs_12,
     },
     {
       info: {
         path: "plugins.mdx",
         absolutePath: "D:/Coding/Lunacord.js/apps/docs/content/docs/plugins.mdx",
       },
-      data: docs_12,
+      data: docs_13,
     },
     {
       info: {
         path: "quickstart.mdx",
         absolutePath: "D:/Coding/Lunacord.js/apps/docs/content/docs/quickstart.mdx",
       },
-      data: docs_13,
+      data: docs_14,
     },
     {
       info: {
         path: "recipes.mdx",
         absolutePath: "D:/Coding/Lunacord.js/apps/docs/content/docs/recipes.mdx",
       },
-      data: docs_14,
+      data: docs_15,
     },
     {
       info: {
         path: "core\\lunacord.mdx",
         absolutePath: "D:/Coding/Lunacord.js/apps/docs/content/docs/core/lunacord.mdx",
       },
-      data: docs_15,
+      data: docs_16,
     },
     {
       info: {
         path: "core\\node.mdx",
         absolutePath: "D:/Coding/Lunacord.js/apps/docs/content/docs/core/node.mdx",
       },
-      data: docs_16,
+      data: docs_17,
     },
     {
       info: {
         path: "core\\player.mdx",
         absolutePath: "D:/Coding/Lunacord.js/apps/docs/content/docs/core/player.mdx",
       },
-      data: docs_17,
+      data: docs_18,
     },
   ],
   [
@@ -160,6 +168,7 @@ export const docs = _runtime.docs<typeof _source.docs>(
         pages: [
           "index",
           "quickstart",
+          "musickit-quickstart",
           "---MusicKit---",
           "musickit",
           "commands",
