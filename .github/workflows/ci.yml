@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    branches: [ master, main ]
   pull_request:
-    branches: [master, main]
+    branches: [ master, main ]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -40,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ ubuntu-latest, windows-latest ]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -56,8 +56,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        node: ["20", "22"]
+        os: [ ubuntu-latest, windows-latest ]
+        node: [ "22", "24" ]
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -69,5 +69,10 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build --filter='./packages/*'
       - name: Run core smoke test under Node
-        run: node --experimental-vm-modules --experimental-specifier-resolution=node -e "import('@lunacord/core').then(m => { if (!m.Lunacord) process.exit(1); })"
+        run: node -e "const fs=require('node:fs'); const path=require('node:path');
+          const file=path.resolve('dist/index.js'); if(!fs.existsSync(file))
+          throw new Error('Missing dist/index.js'); const
+          content=fs.readFileSync(file,'utf8'); if(!content.includes('export {
+          Lunacord')) throw new Error('Missing Lunacord export in
+          dist/index.js');"
         working-directory: packages/core

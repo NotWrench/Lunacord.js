@@ -19,7 +19,7 @@ import * as docs_11 from "../content/docs/persistence.mdx?collection=docs&hash=1
 import * as docs_12 from "../content/docs/plugins.mdx?collection=docs&hash=1776523865355";
 import * as docs_13 from "../content/docs/quickstart.mdx?collection=docs&hash=1776523865355";
 import * as docs_14 from "../content/docs/recipes.mdx?collection=docs&hash=1776523865355";
-import type * as _source from "../source.config";
+import * as _source from "../source.config";
 export const docs = _runtime.docs<typeof _source.docs>(
   [
     {

@@ -64,17 +64,14 @@ music.register({
   execute: async (ctx) => ctx.reply("Pong!"),
 });
 
-// --- Example: override the built-in /play command ----------------------------
-// music.commands.override("play", async (ctx) => {
-//   const query = ctx.interaction.options.getString("query", true);
-//   return ctx.reply(`(custom) playing ${query}`);
-// });
+// /play is provided by installDefaults() — it uses Player.searchAndPlay / applySearchResult:
+// enqueue when something is already playing, otherwise enqueue + start playback.
 
 // --- Example: add middleware to /skip (logging) ------------------------------
-music.commands.extend("skip", (ctx, next) => {
-  console.log(`[skip] ${ctx.interaction.user.tag} in ${ctx.interaction.guild?.name}`);
-  return next();
-});
+// music.commands.extend("skip", (ctx, next) => {
+//   console.log(`[skip] ${ctx.interaction.user.tag} in ${ctx.interaction.guild?.name}`);
+//   return next();
+// });
 
 // --- Wire redis cache for @lunacord/core's cache manager (optional) ----------
 if (redis) {

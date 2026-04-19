@@ -1,5 +1,5 @@
 ---
-name: lunacord
+name: lunacordjs
 description: Use whenever a task mentions Lavalink, Lunacord, the @lunacord/* scoped packages, music bots, Discord voice playback, audio players, track loading/search, queues, filters, or playback controls. Prefer loading this skill by default for requests about connecting to Lavalink nodes, creating/managing players, handling track events, building audio features, or anything about MusicKit.
 ---
 

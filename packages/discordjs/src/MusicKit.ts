@@ -205,15 +205,20 @@ export class MusicKit {
     const existing = this.lunacord.getPlayer(guildId);
     if (existing) {
       existing.setTextChannel(interaction.channelId);
-      if (existing.isConnected) {
-        return existing;
-      }
       const channelId = await this.resolveVoiceChannel(interaction);
       if (!channelId) {
         await this.replyEphemeral(interaction, this.message("joinVoiceFirst"));
         return undefined;
       }
-      await existing.connect(channelId);
+      if (!existing.isConnected) {
+        await existing.connect(channelId);
+        return existing;
+      }
+      const node = this.lunacord.getNodes().find((n) => n.getPlayer(guildId));
+      const currentVoiceChannelId = node?.getVoiceChannelId(guildId);
+      if (currentVoiceChannelId !== channelId) {
+        await existing.connect(channelId);
+      }
       return existing;
     }
 
@@ -260,9 +265,13 @@ export class MusicKit {
   }
 
   private attachGatewayForwarding(): void {
-    // Forward every raw gateway packet — Lunacord filters VOICE_STATE_UPDATE / VOICE_SERVER_UPDATE.
-    this.client.on("raw", (packet) => {
+    // Forward every raw gateway packet; Lunacord filters VOICE_STATE_UPDATE / VOICE_SERVER_UPDATE.
+    const forwardVoicePacket = (packet: unknown): void => {
       this.lunacord.handleVoicePacket(packet);
+    };
+
+    this.client.on("raw", (packet) => {
+      forwardVoicePacket(packet);
     });
   }
 

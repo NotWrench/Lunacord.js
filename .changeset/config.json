@@ -19,7 +19,8 @@
     "@lunacord/test-utils",
     "@lunacord/tsconfig",
     "@lunacord/docs",
-    "@lunacord/example-bot",
+    "@lunacord/example-bot-musickit",
+    "@lunacord/example-bot-core",
     "@lunacord/skill"
   ]
 }

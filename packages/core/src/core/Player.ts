@@ -633,9 +633,12 @@ export class Player {
     );
   }
 
-  async searchAndPlay(query: string, provider?: SearchProviderInput): Promise<SearchResult> {
-    const result = await this.search(query, provider);
-
+  /**
+   * Applies a Lavalink load/search result to this player: always enqueues the resolved track(s).
+   * If nothing is currently loaded as the active track (`current` is `null`), starts playback from
+   * the queue; if a track is already loaded (playing or paused), new items are only queued.
+   */
+  async applySearchResult(result: SearchResult): Promise<SearchResult> {
     if (result.loadType === "empty" || result.loadType === "error" || result.tracks.length === 0) {
       return result;
     }
@@ -649,12 +652,20 @@ export class Player {
     } else {
       return result;
     }
+
     this.addMany(tracksToQueue);
 
-    if (!this.current) {
+    if (this.current === null) {
       await this.play();
     }
+
     return result;
+  }
+
+  /** Search Lavalink, then {@link applySearchResult}. */
+  async searchAndPlay(query: string, provider?: SearchProviderInput): Promise<SearchResult> {
+    const result = await this.search(query, provider);
+    return this.applySearchResult(result);
   }
 
   add(track: Track): void {

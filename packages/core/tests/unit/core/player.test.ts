@@ -1247,6 +1247,39 @@ describe("Player", () => {
     });
   });
 
+  describe("applySearchResult", () => {
+    it("should enqueue and start playback when idle", async () => {
+      const result: SearchResult = {
+        loadType: "search",
+        tracks: [track2],
+      };
+
+      await player.applySearchResult(result);
+
+      expect(result.loadType).toBe("search");
+      expect(player.current?.encoded).toBe(track2.encoded);
+      expect(player.queue.isEmpty).toBe(true);
+      expect(mockNode.rest.updatePlayer).toHaveBeenCalledWith("test-session", "guild-123", {
+        track: { encoded: MOCK_RAW_TRACK_2.encoded },
+      });
+    });
+
+    it("should only enqueue when a track is already loaded", async () => {
+      player.current = track;
+      const result: SearchResult = {
+        loadType: "search",
+        tracks: [track2],
+      };
+
+      await player.applySearchResult(result);
+
+      expect(player.current?.encoded).toBe(track.encoded);
+      expect(player.queue.size).toBe(1);
+      expect(player.queue.peek()?.encoded).toBe(track2.encoded);
+      expect(mockNode.rest.updatePlayer).not.toHaveBeenCalled();
+    });
+  });
+
   describe("searchAndPlay", () => {
     it("should start playback immediately when idle", async () => {
       const result = await player.searchAndPlay("never gonna give you up");
