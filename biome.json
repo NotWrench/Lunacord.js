@@ -38,7 +38,8 @@
       "!**/.next",
       "!**/.turbo",
       "!**/temp",
-      "!**/node_modules"
+      "!**/node_modules",
+      "!**/apps/docs/.source/**"
     ]
   },
   "extends": ["ultracite/biome/core", "ultracite/biome/vitest"]
