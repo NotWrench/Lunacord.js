@@ -38,4 +38,5 @@ export {
   createLoggerPlugin,
   createMetricsPlugin,
   createStatsReporterPlugin,
+  summarizePluginObserveEvent,
 } from "./builtins";

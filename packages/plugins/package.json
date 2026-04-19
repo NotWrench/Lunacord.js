@@ -1,6 +1,6 @@
 {
   "name": "@lunacord/plugins",
-  "version": "1.0.0-alpha.0",
+  "version": "1.0.0-beta",
   "description": "Plugin runtime, builder, and builtins (logger, metrics, debug, autoplay, stats reporter) for Lunacord.",
   "type": "module",
   "license": "MIT",
