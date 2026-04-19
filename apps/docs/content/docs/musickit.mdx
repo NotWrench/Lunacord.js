@@ -39,7 +39,7 @@ MusicKit.create(client, {
   nodes,                    // required
   nodeSelection,            // optional; defaults to leastLoaded
   resume: true,             // Lavalink session resume
-  autoMigrate: true,        // migrate players off dead nodes
+  autoMigrate: true,        // move players off a node that fails reconnect
   logger: console,
   lyrics,                   // @lunacord/lyrics provider
   persistence,              // @lunacord/cache-redis RedisPersistenceAdapter (or a custom PersistenceAdapter)

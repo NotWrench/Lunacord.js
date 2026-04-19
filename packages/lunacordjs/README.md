@@ -51,6 +51,6 @@ await client.login(process.env.DISCORD_TOKEN);
 
 Override Discord intents via `discord.intents` if you need more than `Guilds` and `GuildVoiceStates`.
 
-## Migration
+## Documentation
 
-See the [migration guide](https://github.com/NotWrench/Lunacord.js/blob/master/apps/docs/content/docs/migration.mdx) if you are moving from older layouts.
+Browse **[lunacord-js-docs.vercel.app](https://lunacord-js-docs.vercel.app/)**; source lives under [`apps/docs`](https://github.com/NotWrench/Lunacord.js/tree/master/apps/docs) (`bun --filter @lunacord/docs dev` in this repo).

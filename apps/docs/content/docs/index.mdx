@@ -14,6 +14,7 @@ description: Builder-first Lavalink v4 client for Bun and Node.js, shipped as a 
 - **`@lunacord/plugins`** — `PluginBuilder`, `PluginManager`, and builtins: logger, metrics, debug, autoplay, stats reporter.
 - **`@lunacord/lyrics`** — `LyricsClient` with Lyrics.ovh and Genius providers (plus a Genius OAuth helper).
 - **`@lunacord/cache-redis`** — `RedisCacheStore` and `RedisPersistenceAdapter`.
+- **`lunacord.js`** *(npm)* — umbrella package: re-exports the libraries above, optional subpaths (`/plugins`, `/lyrics`, `/cache`), and `createLunacordMusicClient()` for a ready-made `Client` + `MusicKit`.
 
 ## Why builder-first?
 

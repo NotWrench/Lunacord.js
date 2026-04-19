@@ -1,5 +1,5 @@
 ---
-title: Advanced — raw REST/WS, migration, resume
+title: Advanced — raw REST/WS, player relocation, resume
 ---
 
 ## Raw REST
@@ -31,13 +31,13 @@ Lunacord.create()
   .build();
 ```
 
-## Manual migration
+## Moving a player to another node
 
 ```ts
 await lunacord.movePlayer(guildId, "backup-node");
 ```
 
-The migration snapshots the source player via `player.export()`, copies the voice-state snapshot to the target node, creates a new player there, and re-applies state via REST. `playerMigrate` / `playerMigrationFailed` events track the outcome.
+`movePlayer` snapshots the source player via `player.export()`, copies the voice-state snapshot to the target node, creates a new player there, and re-applies state via REST. `playerMigrate` and `playerMigrationFailed` events report success or failure.
 
 ## Lavalink session resume
 
